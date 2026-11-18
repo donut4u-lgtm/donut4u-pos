@@ -1,5 +1,6 @@
 package com.smartpos.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,12 +32,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.smartpos.PosViewModel
 import com.smartpos.Screen
 import com.smartpos.util.money
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -52,6 +58,10 @@ fun SellTab(vm: PosViewModel) {
     var showCart by remember { mutableStateOf(false) }
     var showPay by remember { mutableStateOf(false) }
 
+    val focusRequester = remember { FocusRequester() }
+    // True while a Bluetooth / USB keyboard-type barcode scanner is connected.
+    val hasHardKeyboard = LocalConfiguration.current.keyboard != Configuration.KEYBOARD_NOKEYS
+
     val filtered = remember(products, query) {
         val q = query.trim()
         if (q.isEmpty()) products
@@ -62,6 +72,28 @@ fun SellTab(vm: PosViewModel) {
     val total = cart.sumOf { it.total }
     val itemCount = cart.sumOf { it.qty }
 
+    // A scanner types the whole barcode within a fraction of a second. When the typed text
+    // stops changing and exactly matches a product's barcode, add it to the cart. No Enter needed.
+    LaunchedEffect(query) {
+        val code = query.trim()
+        if (code.length >= 4) {
+            delay(300)
+            val p = vm.findByBarcode(code)
+            if (p != null) {
+                vm.addToCart(p)
+                query = ""
+            }
+        }
+    }
+
+    // With a scanner connected, keep the search box selected so every scan lands in it.
+    LaunchedEffect(hasHardKeyboard, cart.size, showPay, showCart, receipt) {
+        if (hasHardKeyboard && !showPay && !showCart && receipt == null) {
+            delay(150)
+            runCatching { focusRequester.requestFocus() }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -70,9 +102,9 @@ fun SellTab(vm: PosViewModel) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).focusRequester(focusRequester),
                 singleLine = true,
-                placeholder = { Text("Search, or scan with a barcode gun") },
+                placeholder = { Text("Search, or scan with a barcode scanner") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
@@ -83,7 +115,7 @@ fun SellTab(vm: PosViewModel) {
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = {
-                    // A USB / Bluetooth barcode scanner "types" the code and presses Enter.
+                    // Some scanners also press Enter after the barcode.
                     val code = query.trim()
                     if (code.isNotEmpty()) {
                         scope.launch {
