@@ -62,4 +62,35 @@ interface PosDao {
 
     @Query("DELETE FROM sales WHERE id = :id")
     suspend fun deleteSale(id: Long)
+
+    // ---- Backup / restore ----
+    @Query("SELECT * FROM labels")
+    suspend fun allLabels(): List<LabelEntity>
+
+    @Query("SELECT * FROM products")
+    suspend fun allProducts(): List<Product>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun restoreLabels(list: List<LabelEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun restoreProducts(list: List<Product>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun restoreSales(list: List<Sale>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun restoreSaleItems(list: List<SaleItem>)
+
+    @Query("DELETE FROM sale_items")
+    suspend fun clearSaleItems()
+
+    @Query("DELETE FROM sales")
+    suspend fun clearSales()
+
+    @Query("DELETE FROM products")
+    suspend fun clearProducts()
+
+    @Query("DELETE FROM labels")
+    suspend fun clearLabels()
 }
