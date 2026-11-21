@@ -96,6 +96,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
 
+    // Fixes a library clash between Firebase and the camera (ListenableFuture)
+    implementation("com.google.guava:guava:33.3.1-android")
+
     // On-device ML (bundled models: work offline)
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.mlkit:image-labeling:17.0.9")
