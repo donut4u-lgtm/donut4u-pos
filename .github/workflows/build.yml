@@ -39,8 +39,21 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          gradle assembleDebug --no-daemon
+          set -o pipefail
+          gradle assembleDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/build.log"
           cp app/build/outputs/apk/debug/app-debug.apk donut4u-pos.apk
+
+      - name: Save error summary (only when the build fails)
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/errs"
+          grep -E "^e: |error:|What went wrong|Caused by|Could not|FAILED" "$RUNNER_TEMP/build.log" | head -80 > "$RUNNER_TEMP/errs/build-errors.txt" || true
+          cd "$RUNNER_TEMP/errs"
+          git init -q
+          git checkout -q -b build-log
+          git add build-errors.txt
+          git -c user.name=ci -c user.email=ci@example.com commit -q -m "build errors"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" build-log
 
       - name: Publish APK to Releases
         uses: softprops/action-gh-release@v2
