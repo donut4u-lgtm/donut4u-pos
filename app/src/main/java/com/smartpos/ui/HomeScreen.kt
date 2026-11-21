@@ -35,10 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.smartpos.PosViewModel
 import com.smartpos.Screen
+import com.smartpos.cloud.Cloud
 import com.smartpos.data.Backup
 import com.smartpos.util.formatDateTime
 
@@ -52,11 +54,17 @@ fun HomeScreen(vm: PosViewModel) {
     val shop by vm.settings.shopName.collectAsState()
     val currency by vm.settings.currency.collectAsState()
     val products by vm.products.collectAsState()
+    val cloud by Cloud.state.collectAsState()
+    val monitorShop by Cloud.monitorShopName.collectAsState()
     var showSettings by remember { mutableStateOf(false) }
     var showBackup by remember { mutableStateOf(false) }
+    var showCloud by remember { mutableStateOf(false) }
     var lastBackup by remember { mutableLongStateOf(Backup.lastBackup(context)) }
 
-    val needsBackup = products.isNotEmpty() &&
+    // On a monitoring phone the whole screen is the read-only live view.
+    val isMonitor = cloud.signedIn && cloud.role == Cloud.ROLE_MONITOR
+
+    val needsBackup = !isMonitor && products.isNotEmpty() &&
         System.currentTimeMillis() - lastBackup > DAY_MS
 
     val tabs: List<Pair<String, ImageVector>> = listOf(
@@ -68,29 +76,43 @@ fun HomeScreen(vm: PosViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(shop, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        if (isMonitor && monitorShop.isNotEmpty()) "$monitorShop (monitor)"
+                        else if (isMonitor) "Monitor"
+                        else shop,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 actions = {
-                    TextButton(onClick = { showBackup = true }) { Text("Backup") }
-                    IconButton(onClick = { showSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    TextButton(onClick = { showCloud = true }) { Text("Cloud") }
+                    if (!isMonitor) {
+                        TextButton(onClick = { showBackup = true }) { Text("Backup") }
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                     }
                 }
             )
         },
         bottomBar = {
-            NavigationBar {
-                tabs.forEachIndexed { i, (label, icon) ->
-                    NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { vm.homeTab.value = i },
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label) }
-                    )
+            if (!isMonitor) {
+                NavigationBar {
+                    tabs.forEachIndexed { i, (label, icon) ->
+                        NavigationBarItem(
+                            selected = tab == i,
+                            onClick = { vm.homeTab.value = i },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label) }
+                        )
+                    }
                 }
             }
         },
         floatingActionButton = {
-            if (tab == 1) {
+            if (!isMonitor && tab == 1) {
                 ExtendedFloatingActionButton(
                     onClick = { vm.screen.value = Screen.AddProduct() },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -118,10 +140,14 @@ fun HomeScreen(vm: PosViewModel) {
                 }
             }
             Box(Modifier.weight(1f)) {
-                when (tab) {
-                    0 -> SellTab(vm)
-                    1 -> ProductsTab(vm)
-                    else -> HistoryTab(vm)
+                if (isMonitor) {
+                    MonitorScreen()
+                } else {
+                    when (tab) {
+                        0 -> SellTab(vm)
+                        1 -> ProductsTab(vm)
+                        else -> HistoryTab(vm)
+                    }
                 }
             }
         }
@@ -147,5 +173,9 @@ fun HomeScreen(vm: PosViewModel) {
                 lastBackup = Backup.lastBackup(context)
             }
         )
+    }
+
+    if (showCloud) {
+        CloudDialog(vm = vm, onDismiss = { showCloud = false })
     }
 }
