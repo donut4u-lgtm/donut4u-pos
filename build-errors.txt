@@ -1,0 +1,9 @@
+> Task :app:compileDebugKotlin FAILED
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/ui/CameraComponents.kt:149:44 Cannot access class 'com.google.common.util.concurrent.ListenableFuture'. Check your module classpath for missing or conflicting dependencies.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/ui/CameraComponents.kt:151:9 Cannot access class 'com.google.common.util.concurrent.ListenableFuture'. Check your module classpath for missing or conflicting dependencies.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/ui/CameraComponents.kt:151:16 Unresolved reference 'addListener'.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/ui/CameraComponents.kt:153:25 Cannot access class 'com.google.common.util.concurrent.ListenableFuture'. Check your module classpath for missing or conflicting dependencies.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/ui/CameraComponents.kt:153:32 Unresolved reference 'get'.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/ui/CameraComponents.kt:184:71 Cannot access class 'com.google.common.util.concurrent.ListenableFuture'. Check your module classpath for missing or conflicting dependencies.
+* What went wrong:
+BUILD FAILED in 40s
