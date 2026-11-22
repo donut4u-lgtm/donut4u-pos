@@ -75,7 +75,7 @@ nav button.on{background:#fff;color:#e0247a;box-shadow:0 4px 12px rgba(0,0,0,.18
 .pprice{font-weight:800;font-size:15px;color:var(--text)}
 .pstock{font-weight:700;border-radius:99px;padding:1px 9px;background:rgba(0,168,89,.14);color:var(--ok)}
 .pstock.low{background:rgba(255,122,0,.16);color:var(--warn)}
-.pcard.out{opacity:.5}
+.pcard.out{opacity:.7}
 .right{border-left:2px solid var(--line);background:var(--panel);display:flex;flex-direction:column;height:100%;box-shadow:-8px 0 24px rgba(255,61,139,.08)}
 .cartlines{flex:1;overflow:auto;padding:10px 14px}
 .line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
@@ -419,8 +419,7 @@ function pickColor(name) {
 
 function addToCart(p) {
   const line = S.cart.find(l => l.pid === p.id);
-  const have = line ? line.qty : 0;
-  if (have + 1 > p.stock) { toast(p.stock <= 0 ? `"${p.name}" is out of stock` : `Only ${p.stock} of "${p.name}" in stock`); return; }
+  // Selling is never blocked by the stock number (stock is only a guide).
   if (line) line.qty++; else S.cart.push({ pid: p.id, qty: 1 });
   renderCart();
 }
