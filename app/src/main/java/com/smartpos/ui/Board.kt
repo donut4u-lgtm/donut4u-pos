@@ -30,7 +30,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -124,13 +126,13 @@ private fun LabelColumn(
             .width(210.dp)
             .fillMaxHeight()
             .clip(shape)
-            .background(color.copy(alpha = 0.14f))
+            .background(color.copy(alpha = 0.18f))
             .border(2.dp, color, shape)
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(color)
+                .background(Brush.horizontalGradient(listOf(color, lerp(color, Color.Black, 0.32f))))
                 .then(if (onHeaderClick != null) Modifier.clickable { onHeaderClick(g) } else Modifier)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -181,13 +183,13 @@ private fun ProductCard(
     val stockColor = when {
         p.stock <= 0 -> Color(0xFFD32F2F)
         p.stock <= 5 -> Color(0xFFEF6C00)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> Color(0xFF00A859)
     }
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.35f))
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.6f))
     ) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             ProductImage(p.imagePath, Modifier.size(54.dp).clip(RoundedCornerShape(10.dp)), accent)
@@ -202,14 +204,22 @@ private fun ProductCard(
                 )
                 Text(
                     money(p.price, currency),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    if (p.stock <= 0) "Out of stock" else "Stock: ${p.stock}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = stockColor
-                )
+                Box(
+                    Modifier
+                        .background(stockColor.copy(alpha = 0.16f), CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        if (p.stock <= 0) "Out of stock" else "Stock: ${p.stock}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = stockColor
+                    )
+                }
             }
             if (inCart > 0) {
                 Box(
