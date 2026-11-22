@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.smartpos.ads.Ads
 import com.smartpos.cloud.Cloud
 import com.smartpos.ui.AddProductScreen
 import com.smartpos.ui.EditProductScreen
@@ -25,6 +26,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Ads.init(this)
+        Ads.showOnStart(this)
         setContent {
             PosTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
