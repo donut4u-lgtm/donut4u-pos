@@ -106,6 +106,9 @@ dependencies {
     // Image loading
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Ads (AdMob)
+    implementation("com.google.android.gms:play-services-ads:23.5.0")
+
     // Optional online mode (the user's own Firebase project)
     implementation(platform("com.google.firebase:firebase-bom:33.5.0"))
     implementation("com.google.firebase:firebase-auth")
