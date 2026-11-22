@@ -21,13 +21,12 @@ import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.appopen.AppOpenAd
 
 /**
- * AdMob ads.
- * The two ids below are Google's TEST ad units (safe to tap, never earn money).
- * Replace them with your real ad unit ids before you release.
+ * AdMob ads (donut4u pos real ad units).
+ * Never tap your own ads: Google can ban the AdMob account for that.
  */
 object Ads {
-    const val APP_OPEN_UNIT = "ca-app-pub-3940256099942544/9257395921"
-    const val BANNER_UNIT = "ca-app-pub-3940256099942544/6300978111"
+    const val APP_OPEN_UNIT = "ca-app-pub-5625332026157890/6813573243"
+    const val BANNER_UNIT = "ca-app-pub-5625332026157890/1946717381"
 
     /** The start-up ad is shown at most once in this many milliseconds (4 hours). */
     private const val MIN_GAP_MS = 4L * 60 * 60 * 1000
