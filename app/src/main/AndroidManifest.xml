@@ -20,10 +20,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartPOS">
 
-        <!-- AdMob app id. This is Google's TEST id; replace with your real one before releasing. -->
+        <!-- AdMob app id (donut4u pos). -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-5625332026157890~8156902515" />
 
         <activity
             android:name=".MainActivity"
