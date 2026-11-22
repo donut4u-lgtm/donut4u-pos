@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>donut4u pos</title>
+<style>
+:root{
+  --bg:#f4f5fa; --panel:#ffffff; --text:#1b1d26; --muted:#667085; --line:#e1e4ee;
+  --primary:#2d5bff; --onprimary:#ffffff; --danger:#d32f2f; --warn:#ef6c00; --ok:#2e7d32;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#121319; --panel:#1c1e27; --text:#eceef6; --muted:#9aa1b5; --line:#2e3240;
+         --primary:#8fa8ff; --onprimary:#0a1a5c; --danger:#ff8a80; --warn:#ffb74d; --ok:#81c784; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button{font:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%}
+input:focus,textarea:focus{outline:2px solid var(--primary);outline-offset:-1px}
+label.f{display:block;margin:10px 0 4px;color:var(--muted);font-size:13px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:9px 14px;border-radius:8px}
+.btn:hover{border-color:var(--primary)}
+.btn.primary{background:var(--primary);color:var(--onprimary);border-color:var(--primary);font-weight:600}
+.btn.danger{color:var(--danger)}
+.btn.big{padding:14px 18px;font-size:17px}
+.btn[disabled]{opacity:.5;cursor:default}
+.row{display:flex;gap:8px;align-items:center}
+.grow{flex:1;min-width:0}
+.muted{color:var(--muted)}
+.center{max-width:440px;margin:6vh auto;padding:0 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+h1,h2,h3{margin:0 0 8px}
+.err{color:var(--danger);margin-top:10px;white-space:pre-wrap}
+
+header{height:56px;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font-weight:800;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26vw}
+nav{display:flex;gap:4px}
+nav button{border:0;background:transparent;color:var(--muted);padding:8px 14px;border-radius:8px;font-weight:600}
+nav button.on{background:var(--primary);color:var(--onprimary)}
+.pill{font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)}
+#main{height:calc(100vh - 56px);overflow:auto}
+
+.sell{display:grid;grid-template-columns:1fr 380px;height:100%}
+.left{display:flex;flex-direction:column;min-width:0;padding:12px;gap:10px;height:100%}
+.board{flex:1;display:flex;gap:10px;overflow-x:auto;min-height:0;padding-bottom:6px}
+.col{flex:0 0 190px;display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:var(--panel);border:1px solid var(--line);min-height:0}
+.colhead{padding:9px 11px;font-weight:700;display:flex;justify-content:space-between;cursor:pointer}
+.colbody{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.pcard{border:1px solid var(--line);border-left-width:6px;border-radius:10px;padding:8px;background:var(--bg);text-align:left;color:var(--text);width:100%}
+.pcard:hover{border-color:var(--primary)}
+.pcard img{width:100%;height:70px;object-fit:cover;border-radius:6px;margin-bottom:5px;display:block}
+.pname{font-weight:600;word-break:break-word}
+.pmeta{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.pcard.out{opacity:.5}
+.right{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;height:100%}
+.cartlines{flex:1;overflow:auto;padding:10px 14px}
+.line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.totalbar{padding:14px;border-top:1px solid var(--line)}
+.total{font-size:28px;font-weight:800;display:flex;justify-content:space-between;margin-bottom:10px}
+
+.page{max-width:1000px;margin:0 auto;padding:16px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;text-transform:uppercase;color:var(--muted)}
+td img{width:40px;height:40px;object-fit:cover;border-radius:6px;display:block}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.sale{padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.sale .items{margin-top:8px;cursor:default}
+.stat{font-size:30px;font-weight:800}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px}
+.modal{background:var(--panel);border-radius:14px;padding:18px;width:min(520px,100%);max-height:92vh;overflow:auto;border:1px solid var(--line)}
+.swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.sw{height:42px;border-radius:8px;border:3px solid transparent;cursor:pointer}
+.sw.on{border-color:var(--text)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:10px;z-index:99;max-width:90vw}
+video{width:100%;border-radius:10px;background:#000;max-height:50vh}
+.receipt{font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:8px;font-size:13px}
+
+@media (max-width:820px){
+  .sell{grid-template-columns:1fr;grid-template-rows:60% 40%}
+  .right{border-left:0;border-top:1px solid var(--line)}
+  header{gap:6px;padding:0 8px} .brand{display:none}
+}
+@media print{
+  body *{visibility:hidden}
+  .receipt,.receipt *{visibility:visible}
+  .receipt{position:absolute;left:0;top:0;width:80mm;background:#fff;color:#000}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, collection, doc, onSnapshot, query, orderBy, limit, writeBatch, increment }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+/* ------------------------------------------------------------------ helpers */
+const PALETTE = ["#E53935","#FB8C00","#F9A825","#43A047","#00897B","#00ACC1","#1E88E5","#3949AB","#8E24AA","#D81B60","#6D4C41","#546E7A"];
+const colorOf = i => PALETTE[((i % 12) + 12) % 12];
+const onColor = hex => {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#000" : "#fff";
+};
+const round2 = v => Math.round(v * 100) / 100;
+
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "style") e.style.cssText = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (["value", "disabled", "checked", "selected"].includes(k)) e[k] = v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+const $app = document.getElementById("app");
+const money = v => S.currency + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDate = ts => new Date(ts).toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+const startOfDay = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+
+let toastTimer;
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const t = h("div", { class: "toast" }, msg);
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 3200);
+}
+
+const modals = [];
+function openModal(content, { wide } = {}) {
+  const overlay = h("div", { class: "overlay" }, h("div", { class: "modal", style: wide ? "width:min(760px,100%)" : "" }, content));
+  const api = { close() { overlay.remove(); const i = modals.indexOf(api); if (i >= 0) modals.splice(i, 1); api.onClose?.(); if (!modals.length) focusSearch(); } };
+  overlay.addEventListener("mousedown", e => { if (e.target === overlay) api.close(); });
+  document.body.append(overlay);
+  modals.push(api);
+  return api;
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && modals.length) modals[modals.length - 1].close(); });
+
+function confirmBox(title, text, okLabel, onOk) {
+  const m = openModal(h("div", {},
+    h("h3", {}, title), h("p", { class: "muted" }, text),
+    h("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+      h("button", { class: "btn", onclick: () => m.close() }, "Cancel"),
+      h("button", { class: "btn primary", onclick: () => { m.close(); onOk(); } }, okLabel))));
+}
+
+/* -------------------------------------------------------------------- state */
+const S = {
+  cfg: null, user: null, tab: "sell",
+  products: [], labels: [], sales: [],
+  shop: "donut4u pos", currency: "₱",
+  cart: [], search: "", pending: false,
+  lastProductId: 0, lastSaleId: 0
+};
+const CFG_KEY = "donut4u_cfg";
+try { S.cfg = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); } catch (e) { S.cfg = null; }
+
+let app, auth, db, uid, unsubs = [];
+
+function parseSetup(text) {
+  const parts = text.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+  const apiKey = parts.find(p => p.startsWith("AIza"));
+  const appId = parts.find(p => /^\d+:\d+:android:[0-9a-fA-F]+$/.test(p) || /^\d+:\d+:web:[0-9a-fA-F]+$/.test(p));
+  const projectId = parts.find(p => p !== apiKey && p !== appId && /^[a-z][a-z0-9-]{3,}$/.test(p));
+  if (!apiKey || !appId || !projectId) return null;
+  return { apiKey, appId, projectId };
+}
+
+function friendlyAuthError(e) {
+  const c = e && e.code || "";
+  if (/invalid-credential|wrong-password|user-not-found/.test(c)) return "Wrong email or password. (If this is a new account, tap Create account.)";
+  if (c.includes("email-already-in-use")) return "That email already has an account. Tap Sign in instead.";
+  if (c.includes("weak-password")) return "Password must have 6 or more characters.";
+  if (c.includes("invalid-email")) return "The email is not written correctly.";
+  if (c.includes("operation-not-allowed")) return "Email sign-in is turned off in your Firebase project.";
+  if (c.includes("network")) return "No internet connection.";
+  if (/api-key|requests-from-referer|blocked/.test(c + (e.message || ""))) return "Firebase refused the API key for a website.\n" + (e.message || c);
+  return (e && e.message) || "Could not sign in.";
+}
+
+/* ------------------------------------------------------------------- start */
+function boot() {
+  if (!S.cfg) return renderSetup();
+  try {
+    app = initializeApp({ apiKey: S.cfg.apiKey, projectId: S.cfg.projectId, appId: S.cfg.appId, authDomain: S.cfg.projectId + ".firebaseapp.com" });
+    auth = getAuth(app);
+    db = initializeFirestore(app, { localCache: persistentLocalCache() });
+  } catch (e) { return renderSetup("Could not start: " + e.message); }
+  $app.replaceChildren(h("div", { class: "center muted" }, "Loading..."));
+  onAuthStateChanged(auth, user => {
+    unsubs.forEach(u => u()); unsubs = [];
+    S.user = user; uid = user && user.uid;
+    if (user) { subscribe(); renderShell(); } else renderLogin();
+  });
+}
+
+const col = name => collection(db, "users", uid, name);
+const dref = (name, id) => doc(db, "users", uid, name, String(id));
+const labelDocId = n => "l_" + n.replace(/\//g, "_");
+
+function subscribe() {
+  const opt = { includeMetadataChanges: true };
+  unsubs.push(onSnapshot(col("products"), opt, snap => {
+    S.products = snap.docs.map(d => normProduct(d.id, d.data()));
+    S.lastProductId = Math.max(S.lastProductId, ...S.products.map(p => p.id), 0);
+    S.pending = snap.metadata.hasPendingWrites; refresh();
+  }, e => toast("Cloud problem: " + e.message)));
+  unsubs.push(onSnapshot(col("labels"), snap => {
+    S.labels = snap.docs.map(d => ({ name: d.data().name, colorIndex: Number(d.data().colorIndex) || 0 })).filter(l => l.name);
+    refresh();
+  }));
+  unsubs.push(onSnapshot(query(col("sales"), orderBy("timestamp", "desc"), limit(300)), opt, snap => {
+    S.sales = snap.docs.map(d => d.data());
+    S.lastSaleId = Math.max(S.lastSaleId, ...S.sales.map(s => Number(s.id) || 0), 0);
+    S.pending = snap.metadata.hasPendingWrites; refresh();
+  }, e => toast("Cloud problem: " + e.message)));
+  unsubs.push(onSnapshot(doc(db, "users", uid, "meta", "shop"), snap => {
+    if (snap.exists()) { S.shop = snap.data().shopName || S.shop; S.currency = snap.data().currency || S.currency; }
+    const b = document.querySelector(".brand"); if (b) b.textContent = S.shop;
+    refresh();
+  }));
+}
+function normProduct(id, d) {
+  return { id: Number(d.id ?? id), barcode: d.barcode || "", name: d.name || "", price: Number(d.price) || 0,
+           stock: Number(d.stock) || 0, label: d.label || "Other", createdAt: Number(d.createdAt) || 0, image: d.image || null };
+}
+window.addEventListener("online", () => refresh());
+window.addEventListener("offline", () => refresh());
+
+/* -------------------------------------------------------------- setup/login */
+function renderSetup(error) {
+  const ta = h("textarea", { rows: 4, placeholder: "Project ID\nAPI key (AIza...)\nApp ID" });
+  const err = h("div", { class: "err" }, error || "");
+  $app.replaceChildren(h("div", { class: "center" }, h("div", { class: "card" },
+    h("h2", {}, "donut4u pos"),
+    h("p", { class: "muted" }, "Paste your setup code (the same 3 lines you used in the phone app)."),
+    ta,
+    h("button", { class: "btn primary", style: "margin-top:12px;width:100%", onclick: () => {
+      const cfg = parseSetup(ta.value);
+      if (!cfg) { err.textContent = "The setup code needs the Project ID, the API key (starts with AIza) and the App ID."; return; }
+      localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); S.cfg = cfg; boot();
+    } }, "Connect"), err)));
+}
+
+function renderLogin() {
+  const email = h("input", { type: "email", placeholder: "Email", autocomplete: "username" });
+  const pass = h("input", { type: "password", placeholder: "Password (6 or more characters)", autocomplete: "current-password" });
+  const err = h("div", { class: "err" });
+  const go = async create => {
+    err.textContent = "";
+    try {
+      if (create) await createUserWithEmailAndPassword(auth, email.value.trim(), pass.value);
+      else await signInWithEmailAndPassword(auth, email.value.trim(), pass.value);
+    } catch (e) { err.textContent = friendlyAuthError(e); }
+  };
+  pass.addEventListener("keydown", e => { if (e.key === "Enter") go(false); });
+  $app.replaceChildren(h("div", { class: "center" }, h("div", { class: "card" },
+    h("h2", {}, "Sign in"),
+    h("p", { class: "muted" }, "Use the same email and password as your phone app, so the computer and phones share one shop."),
+    h("label", { class: "f" }, "Email"), email,
+    h("label", { class: "f" }, "Password"), pass,
+    h("div", { class: "row", style: "margin-top:14px" },
+      h("button", { class: "btn primary grow", onclick: () => go(false) }, "Sign in"),
+      h("button", { class: "btn grow", onclick: () => go(true) }, "Create account")),
+    err,
+    h("button", { class: "btn", style: "margin-top:14px", onclick: () => { localStorage.removeItem(CFG_KEY); S.cfg = null; location.reload(); } }, "Change setup code"))));
+  setTimeout(() => email.focus(), 0);
+}
+
+/* -------------------------------------------------------------------- shell */
+const V = {};
+function renderShell() {
+  V.status = h("span", { class: "pill" });
+  V.main = h("div", { id: "main" });
+  const tabs = [["sell", "Sell"], ["products", "Products"], ["history", "History"], ["settings", "Settings"]];
+  V.nav = h("nav", {}, tabs.map(([k, label]) => h("button", { "data-k": k, class: S.tab === k ? "on" : "", onclick: () => { S.tab = k; renderShell(); } }, label)));
+  $app.replaceChildren(
+    h("header", {}, h("div", { class: "brand" }, S.shop), V.nav, h("div", { class: "grow" }), V.status),
+    V.main);
+  renderTab();
+  refresh();
+}
+function renderTab() {
+  if (S.tab === "sell") renderSell();
+  else if (S.tab === "products") renderProducts();
+  else if (S.tab === "history") renderHistory();
+  else renderSettings();
+}
+function refresh() {
+  if (!V.main || !S.user) return;
+  if (V.status) {
+    const off = !navigator.onLine;
+    V.status.className = "pill " + (off ? "warn" : S.pending ? "" : "ok");
+    V.status.textContent = off ? "Offline: sales are saved and will upload" : S.pending ? "Saving to cloud..." : "Online, saved";
+  }
+  if (S.tab === "sell") { renderBoard(); renderCart(); }
+  else if (S.tab === "products") renderProductRows();
+  else if (S.tab === "history") renderHistoryRows();
+}
+function focusSearch() {
+  if (S.tab === "sell" && V.search && !modals.length) V.search.focus();
+}
+
+/* --------------------------------------------------------------------- sell */
+function labelIndex(name) { return (S.labels.find(l => l.name === name) || { colorIndex: 0 }).colorIndex; }
+
+function renderSell() {
+  let timer;
+  V.search = h("input", { placeholder: "Scan barcode or search by name...", value: S.search, autocomplete: "off",
+    oninput: e => {
+      S.search = e.target.value; renderBoard();
+      clearTimeout(timer);
+      const code = S.search.trim();
+      if (code.length >= 4) timer = setTimeout(() => { if (V.search.value.trim() === code) scanned(code, false); }, 450);
+    },
+    onkeydown: e => { if (e.key === "Enter") { clearTimeout(timer); scanned(V.search.value.trim(), true); } } });
+  V.board = h("div", { class: "board" });
+  V.cartLines = h("div", { class: "cartlines" });
+  V.total = h("div", { class: "total" });
+  V.chargeBtn = h("button", { class: "btn primary big", style: "width:100%", onclick: openPay }, "Charge");
+  V.main.replaceChildren(h("div", { class: "sell" },
+    h("div", { class: "left" }, V.search, V.board),
+    h("div", { class: "right" },
+      h("div", { style: "padding:12px 14px 0" }, h("h3", {}, "Cart"),),
+      V.cartLines,
+      h("div", { class: "totalbar" }, V.total, V.chargeBtn,
+        h("button", { class: "btn", style: "width:100%;margin-top:8px", onclick: () => { S.cart = []; renderCart(); focusSearch(); } }, "Clear cart")))));
+  renderBoard(); renderCart(); focusSearch();
+}
+
+function scanned(code, enter) {
+  if (!code) return;
+  const p = S.products.find(x => x.barcode && x.barcode === code);
+  if (p) { addToCart(p); S.search = ""; V.search.value = ""; renderBoard(); return; }
+  if (enter && /^[0-9A-Za-z\-]{4,}$/.test(code) && !S.products.some(x => x.name.toLowerCase().includes(code.toLowerCase()))) {
+    confirmBox("Unknown barcode", `No product has the barcode ${code}. Add it as a new product?`, "Add product", () => { S.tab = "products"; renderShell(); openProductForm(null, code); });
+  }
+}
+
+function renderBoard() {
+  if (!V.board) return;
+  const q = S.search.trim().toLowerCase();
+  const list = S.products.filter(p => !q || p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q));
+  const groups = new Map();
+  list.forEach(p => { if (!groups.has(p.label)) groups.set(p.label, []); groups.get(p.label).push(p); });
+  const names = [...groups.keys()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  if (!names.length) {
+    V.board.replaceChildren(h("div", { class: "muted", style: "margin:auto;text-align:center" },
+      S.products.length ? "No product matches." : "No products yet. Open the Products tab and add some."));
+    return;
+  }
+  V.board.replaceChildren(...names.map(n => {
+    const c = colorOf(labelIndex(n)), fg = onColor(c);
+    return h("div", { class: "col", style: `border-top:4px solid ${c}` },
+      h("div", { class: "colhead", style: `background:${c};color:${fg}`, title: "Click to change color", onclick: () => pickColor(n) },
+        h("span", {}, n), h("span", {}, groups.get(n).length)),
+      h("div", { class: "colbody" }, groups.get(n).sort((a, b) => a.name.localeCompare(b.name)).map(p =>
+        h("button", { class: "pcard" + (p.stock <= 0 ? " out" : ""), style: `border-left-color:${c}`, onclick: () => { addToCart(p); focusSearch(); } },
+          p.image ? h("img", { src: p.image, alt: "" }) : null,
+          h("div", { class: "pname" }, p.name),
+          h("div", { class: "pmeta" }, h("span", {}, money(p.price)), h("span", { style: p.stock <= 5 ? "color:var(--warn);font-weight:700" : "" }, p.stock <= 0 ? "Out" : p.stock + " left"))))));
+  }));
+}
+
+function pickColor(name) {
+  const cur = labelIndex(name);
+  const m = openModal(h("div", {}, h("h3", {}, `Color for "${name}"`),
+    h("div", { class: "swatches", style: "margin-top:10px" }, PALETTE.map((c, i) =>
+      h("div", { class: "sw" + (i === cur ? " on" : ""), style: `background:${c}`, onclick: () => {
+        const b = writeBatch(db);
+        b.set(dref("labels", labelDocId(name)), { name, colorIndex: i });
+        b.commit().catch(e => toast("Could not save: " + e.message));
+        m.close();
+      } })))));
+}
+
+function addToCart(p) {
+  const line = S.cart.find(l => l.pid === p.id);
+  const have = line ? line.qty : 0;
+  if (have + 1 > p.stock) { toast(p.stock <= 0 ? `"${p.name}" is out of stock` : `Only ${p.stock} of "${p.name}" in stock`); return; }
+  if (line) line.qty++; else S.cart.push({ pid: p.id, qty: 1 });
+  renderCart();
+}
+
+function cartDetail() {
+  const lines = [];
+  S.cart = S.cart.filter(l => S.products.some(p => p.id === l.pid));
+  for (const l of S.cart) { const p = S.products.find(x => x.id === l.pid); lines.push({ ref: l, p, get qty() { return l.qty; } }); }
+  return lines;
+}
+function renderCart() {
+  if (!V.cartLines) return;
+  const lines = cartDetail();
+  const total = round2(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
+  V.cartLines.replaceChildren(...(lines.length ? lines.map(l =>
+    h("div", { class: "line" },
+      h("div", { class: "grow" }, h("div", { class: "pname" }, l.p.name), h("div", { class: "muted" }, money(l.p.price) + " each")),
+      h("div", { class: "qty" },
+        h("button", { onclick: () => { l.ref.qty--; if (l.ref.qty <= 0) S.cart = S.cart.filter(x => x !== l.ref); renderCart(); focusSearch(); } }, "−"),
+        h("b", {}, l.qty),
+        h("button", { onclick: () => { addToCart(l.p); focusSearch(); } }, "+")),
+      h("div", { style: "width:84px;text-align:right;font-weight:700" }, money(l.p.price * l.qty)),
+      h("button", { class: "btn", style: "padding:4px 8px", title: "Remove", onclick: () => { S.cart = S.cart.filter(x => x !== l.ref); renderCart(); focusSearch(); } }, "✕")))
+    : [h("div", { class: "muted", style: "margin-top:20px;text-align:center" }, "Scan a barcode or tap a product.")]));
+  V.total.replaceChildren(h("span", {}, "Total"), h("span", {}, money(total)));
+  V.chargeBtn.disabled = !lines.length;
+}
+
+function openPay() {
+  const lines = cartDetail();
+  if (!lines.length) return;
+  const total = round2(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
+  const paid = h("input", { type: "number", step: "0.01", min: "0", value: total.toFixed(2), style: "font-size:22px;font-weight:700" });
+  const change = h("div", { style: "font-size:22px;font-weight:800;margin-top:10px" });
+  const err = h("div", { class: "err" });
+  const upd = () => { const c = round2((parseFloat(paid.value) || 0) - total); change.textContent = "Change: " + (c >= 0 ? money(c) : "not enough"); change.style.color = c >= 0 ? "var(--ok)" : "var(--danger)"; };
+  paid.addEventListener("input", upd);
+  const done = () => {
+    const v = round2(parseFloat(paid.value));
+    if (!(v >= total)) { err.textContent = "The amount paid is less than the total."; return; }
+    m.close(); completeSale(v);
+  };
+  paid.addEventListener("keydown", e => { if (e.key === "Enter") done(); });
+  const quick = [50, 100, 200, 500, 1000].map(n => h("button", { class: "btn", onclick: () => { paid.value = n; upd(); paid.focus(); } }, String(n)));
+  const m = openModal(h("div", {},
+    h("h3", {}, "Payment"),
+    h("div", { class: "stat" }, money(total)),
+    h("label", { class: "f" }, "Cash received"), paid,
+    h("div", { class: "row", style: "margin-top:8px;flex-wrap:wrap" }, h("button", { class: "btn", onclick: () => { paid.value = total.toFixed(2); upd(); } }, "Exact"), quick),
+    change, err,
+    h("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+      h("button", { class: "btn", onclick: () => m.close() }, "Cancel"),
+      h("button", { class: "btn primary big", onclick: done }, "Complete sale"))));
+  upd(); setTimeout(() => { paid.focus(); paid.select(); }, 0);
+}
+
+function completeSale(paid) {
+  const lines = cartDetail();
+  const total = round2(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
+  const id = ++S.lastSaleId;
+  const sale = {
+    id, timestamp: Date.now(), total, paid, change: round2(paid - total),
+    items: lines.map((l, i) => ({ id: i + 1, productId: l.p.id, name: l.p.name, price: l.p.price, qty: l.qty }))
+  };
+  const b = writeBatch(db);
+  b.set(dref("sales", id), sale);
+  lines.forEach(l => b.update(dref("products", l.p.id), { stock: increment(-l.qty) }));
+  b.commit().catch(e => toast("Could not save the sale: " + e.message));
+  S.cart = [];
+  renderCart();
+  showReceipt(sale);
+}
+
+function receiptText(sale) {
+  const L = [S.shop, fmtDate(sale.timestamp), "Receipt #" + sale.id, "------------------------------"];
+  sale.items.forEach(i => { L.push(`${i.qty} x ${i.name}`); L.push(`     @ ${money(i.price)} = ${money(i.price * i.qty)}`); });
+  L.push("------------------------------", "TOTAL:  " + money(sale.total), "CASH:   " + money(sale.paid), "CHANGE: " + money(sale.change), "", "Thank you!");
+  return L.join("\n");
+}
+function showReceipt(sale) {
+  const m = openModal(h("div", {}, h("h3", {}, "Sale complete"),
+    h("div", { class: "receipt" }, receiptText(sale)),
+    h("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+      h("button", { class: "btn", onclick: () => window.print() }, "Print"),
+      h("button", { class: "btn primary", onclick: () => m.close() }, "New sale"))));
+}
+
+/* ----------------------------------------------------------------- products */
+function renderProducts() {
+  V.psearch = h("input", { placeholder: "Search products...", oninput: () => renderProductRows() });
+  V.prows = h("tbody", {});
+  V.pcount = h("span", { class: "muted" });
+  V.main.replaceChildren(h("div", { class: "page" },
+    h("div", { class: "row", style: "margin-bottom:12px" }, V.psearch,
+      h("button", { class: "btn primary", style: "white-space:nowrap", onclick: () => openProductForm(null) }, "+ Add product")),
+    V.pcount,
+    h("table", { style: "margin-top:8px" }, h("thead", {}, h("tr", {}, ["", "Name", "Barcode", "Label", "Price", "Stock", ""].map(t => h("th", {}, t)))), V.prows)));
+  renderProductRows();
+}
+function renderProductRows() {
+  if (!V.prows) return;
+  const q = (V.psearch.value || "").trim().toLowerCase();
+  const list = S.products.filter(p => !q || p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  V.pcount.textContent = `${S.products.length} products · ${S.labels.length} labels`;
+  V.prows.replaceChildren(...list.map(p => {
+    const c = colorOf(labelIndex(p.label));
+    return h("tr", {},
+      h("td", {}, p.image ? h("img", { src: p.image, alt: "" }) : null),
+      h("td", {}, h("b", {}, p.name)), h("td", { class: "muted" }, p.barcode),
+      h("td", {}, h("span", { class: "chip", style: `background:${c};color:${onColor(c)}` }, p.label)),
+      h("td", {}, money(p.price)),
+      h("td", { style: p.stock <= 5 ? "color:var(--warn);font-weight:700" : "" }, p.stock),
+      h("td", { style: "white-space:nowrap;text-align:right" },
+        h("button", { class: "btn", onclick: () => openProductForm(p) }, "Edit"), " ",
+        h("button", { class: "btn danger", onclick: () => confirmBox("Delete product", `Delete "${p.name}"? Past sales stay in History.`, "Delete", () => deleteProduct(p)) }, "Delete")));
+  }));
+  if (!list.length) V.prows.replaceChildren(h("tr", {}, h("td", { colspan: 7, class: "muted", style: "text-align:center;padding:24px" }, "No products.")));
+}
+function deleteProduct(p) {
+  const b = writeBatch(db);
+  b.delete(dref("products", p.id));
+  if (!S.products.some(x => x.id !== p.id && x.label === p.label)) b.delete(dref("labels", labelDocId(p.label)));
+  b.commit().catch(e => toast("Could not delete: " + e.message));
+}
+
+function canonicalLabel(input) {
+  const t = input.trim().replace(/\s+/g, " ");
+  if (!t) return "Other";
+  const found = S.labels.find(l => l.name.toLowerCase() === t.toLowerCase());
+  return found ? found.name : t;
+}
+function nextFreeColor() {
+  const used = new Set(S.labels.map(l => ((l.colorIndex % 12) + 12) % 12));
+  for (let i = 0; i < 12; i++) if (!used.has(i)) return i;
+  return S.labels.length % 12;
+}
+
+function openProductForm(p, barcode) {
+  const f = {
+    name: h("input", { value: p ? p.name : "", placeholder: "e.g. Glazed donut" }),
+    barcode: h("input", { value: p ? p.barcode : (barcode || ""), placeholder: "Scan with your scanner, or type" }),
+    price: h("input", { type: "number", step: "0.01", min: "0", value: p ? p.price : "" }),
+    stock: h("input", { type: "number", step: "1", min: "0", value: p ? p.stock : "" }),
+    label: h("input", { value: p ? p.label : "", list: "labelopts", placeholder: "Column name, e.g. Donuts" })
+  };
+  let image = p ? p.image : null;
+  const preview = h("img", { alt: "", style: "width:90px;height:90px;object-fit:cover;border-radius:10px;display:none" });
+  const sugg = h("div", { class: "row", style: "flex-wrap:wrap;margin-top:8px" });
+  const err = h("div", { class: "err" });
+  const showImg = () => { if (image) { preview.src = image; preview.style.display = "block"; } };
+  showImg();
+  const gotPicture = async canvas => {
+    image = canvas.toDataURL("image/jpeg", 0.72); showImg();
+    sugg.replaceChildren(h("span", { class: "muted" }, "Finding a label..."));
+    try {
+      const names = await suggestLabels(canvas);
+      sugg.replaceChildren(h("span", { class: "muted" }, "Suggested label: "),
+        ...names.map(n => h("button", { class: "btn", onclick: () => { f.label.value = n; } }, n)));
+    } catch (e) { sugg.replaceChildren(h("span", { class: "muted" }, "Could not suggest a label (needs internet). Type one instead.")); }
+  };
+  const file = h("input", { type: "file", accept: "image/*", style: "display:none", onchange: async e => {
+    const fl = e.target.files[0]; if (!fl) return;
+    const img = new Image(); img.onload = () => gotPicture(scaleTo(img, img.width, img.height)); img.src = URL.createObjectURL(fl);
+  } });
+  const save = () => {
+    err.textContent = "";
+    const name = f.name.value.trim(), code = f.barcode.value.trim();
+    const price = parseFloat(String(f.price.value).replace(",", ".")), stock = parseInt(f.stock.value, 10);
+    if (!name) { err.textContent = "Enter the product name."; return; }
+    if (!(price >= 0)) { err.textContent = "Enter the price."; return; }
+    if (!(stock >= 0)) { err.textContent = "Enter the stock (0 or more)."; return; }
+    if (code && S.products.some(x => x.barcode === code && (!p || x.id !== p.id))) { err.textContent = "Another product already uses that barcode."; return; }
+    const label = canonicalLabel(f.label.value);
+    const id = p ? p.id : ++S.lastProductId;
+    const data = { id, barcode: code, name, price, stock, label, createdAt: p ? p.createdAt : Date.now() };
+    if (image) data.image = image;
+    const b = writeBatch(db);
+    b.set(dref("products", id), data, { merge: true });
+    if (!S.labels.some(l => l.name === label)) b.set(dref("labels", labelDocId(label)), { name: label, colorIndex: nextFreeColor() });
+    b.commit().catch(e => toast("Could not save: " + e.message));
+    m.close();
+    toast(p ? "Product updated" : "Product added");
+  };
+  const m = openModal(h("div", {},
+    h("h3", {}, p ? "Edit product" : "Add product"),
+    h("div", { class: "row" },
+      h("button", { class: "btn", onclick: () => openCamera(f.barcode, gotPicture) }, "📷 Take photo"),
+      h("button", { class: "btn", onclick: () => file.click() }, "Choose picture"), file, preview),
+    sugg,
+    h("label", { class: "f" }, "Name"), f.name,
+    h("label", { class: "f" }, "Barcode"), f.barcode,
+    h("div", { class: "row" },
+      h("div", { class: "grow" }, h("label", { class: "f" }, "Price"), f.price),
+      h("div", { class: "grow" }, h("label", { class: "f" }, "Stock"), f.stock)),
+    h("label", { class: "f" }, "Label (column)"), f.label,
+    h("datalist", { id: "labelopts" }, S.labels.map(l => h("option", { value: l.name }))),
+    err,
+    h("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+      h("button", { class: "btn", onclick: () => m.close() }, "Cancel"),
+      h("button", { class: "btn primary", onclick: save }, "Save"))));
+  setTimeout(() => (p ? f.name : (barcode ? f.name : f.barcode)).focus(), 0);
+}
+
+function scaleTo(src, w, hh) {
+  const max = 320, k = Math.min(1, max / Math.max(w, hh));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * k); c.height = Math.round(hh * k);
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function openCamera(barcodeInput, onPicture) {
+  let stream, stopped = false, timer;
+  const video = h("video", { autoplay: true, playsinline: true, muted: true });
+  const msg = h("div", { class: "muted", style: "margin-top:8px" }, "Point the camera at the product.");
+  const stop = () => { stopped = true; clearInterval(timer); stream && stream.getTracks().forEach(t => t.stop()); };
+  const m = openModal(h("div", {}, h("h3", {}, "Take a picture"), video, msg,
+    h("div", { class: "row", style: "justify-content:flex-end;margin-top:12px" },
+      h("button", { class: "btn", onclick: () => m.close() }, "Cancel"),
+      h("button", { class: "btn primary", onclick: () => {
+        if (!video.videoWidth) return;
+        const c = scaleTo(video, video.videoWidth, video.videoHeight); m.close(); onPicture(c);
+      } }, "Capture"))));
+  m.onClose = stop;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    if (stopped) { stop(); return; }
+    video.srcObject = stream; video.play().catch(() => {});
+    if ("BarcodeDetector" in window) {
+      const det = new BarcodeDetector();
+      timer = setInterval(async () => {
+        if (stopped || !video.videoWidth) return;
+        try {
+          const r = await det.detect(video);
+          if (r.length) { barcodeInput.value = r[0].rawValue; msg.textContent = "Barcode read: " + r[0].rawValue; }
+        } catch (e) { /* ignore */ }
+      }, 500);
+    } else msg.textContent = "Point the camera at the product, then Capture. (Type or scan the barcode in the form.)";
+  } catch (e) { msg.textContent = "Camera not available: " + e.message + ". Use \"Choose picture\" instead."; msg.style.color = "var(--danger)"; }
+}
+
+let mobilenetPromise;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("load " + src)); document.head.append(s); }); }
+async function suggestLabels(canvas) {
+  if (!mobilenetPromise) mobilenetPromise = (async () => {
+    await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js");
+    return window.mobilenet.load({ version: 2, alpha: 1.0 });
+  })();
+  let model;
+  try { model = await mobilenetPromise; } catch (e) { mobilenetPromise = null; throw e; }
+  const preds = await model.classify(canvas, 3);
+  const seen = new Set(), out = [];
+  for (const p of preds) {
+    const n = p.className.split(",")[0].trim(); const t = n.charAt(0).toUpperCase() + n.slice(1);
+    if (!seen.has(t)) { seen.add(t); out.push(t); }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ history */
+function renderHistory() {
+  V.hsum = h("div", { class: "card", style: "margin-bottom:12px" });
+  V.hrows = h("div", { class: "card", style: "padding:0" });
+  V.main.replaceChildren(h("div", { class: "page" }, V.hsum,
+    h("div", { class: "row", style: "margin-bottom:8px" }, h("h3", { class: "grow", style: "margin:0" }, "Sales"),
+      h("button", { class: "btn", onclick: downloadCsv }, "Download CSV")),
+    V.hrows));
+  renderHistoryRows();
+}
+let openSale = null;
+function renderHistoryRows() {
+  if (!V.hrows) return;
+  const today = S.sales.filter(s => s.timestamp >= startOfDay());
+  V.hsum.replaceChildren(h("div", { class: "muted" }, "Today"), h("div", { class: "stat" }, money(today.reduce((s, x) => s + x.total, 0))),
+    h("div", { class: "muted" }, `${today.length} sale${today.length === 1 ? "" : "s"} · ${today.reduce((s, x) => s + x.items.reduce((a, i) => a + i.qty, 0), 0)} items`));
+  if (!S.sales.length) { V.hrows.replaceChildren(h("div", { class: "muted", style: "padding:24px;text-align:center" }, "No sales yet.")); return; }
+  V.hrows.replaceChildren(...S.sales.map(s => {
+    const open = openSale === s.id;
+    return h("div", { class: "sale", onclick: () => { openSale = open ? null : s.id; renderHistoryRows(); } },
+      h("div", { class: "row" },
+        h("div", { class: "grow" }, h("b", {}, "Sale #" + s.id), h("div", { class: "muted" }, fmtDate(s.timestamp))),
+        h("b", { style: "font-size:17px" }, money(s.total))),
+      open ? h("div", { class: "items", onclick: e => e.stopPropagation() },
+        s.items.map(i => h("div", { class: "row" }, h("span", { class: "grow" }, `${i.qty} × ${i.name}`), h("span", {}, money(i.price * i.qty)))),
+        h("div", { class: "row", style: "margin-top:10px;justify-content:flex-end" },
+          h("button", { class: "btn", onclick: () => showReceipt(s) }, "Receipt"),
+          h("button", { class: "btn danger", onclick: () => confirmBox("Void sale", `Cancel sale #${s.id} and put the items back in stock?`, "Void sale", () => voidSale(s)) }, "Void"))) : null);
+  }));
+}
+function voidSale(s) {
+  const b = writeBatch(db);
+  b.delete(dref("sales", s.id));
+  s.items.forEach(i => { if (S.products.some(p => p.id === i.productId)) b.update(dref("products", i.productId), { stock: increment(i.qty) }); });
+  b.commit().catch(e => toast("Could not void: " + e.message));
+  openSale = null;
+}
+function download(name, text, type) {
+  const a = h("a", { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  document.body.append(a); a.click(); a.remove();
+}
+function downloadCsv() {
+  const cell = v => { const s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = [["Sale", "Date", "Item", "Qty", "Price", "Line total", "Sale total"]];
+  S.sales.forEach(s => s.items.forEach(i => rows.push([s.id, new Date(s.timestamp).toISOString(), i.name, i.qty, i.price, round2(i.price * i.qty), s.total])));
+  download("sales.csv", rows.map(r => r.map(cell).join(",")).join("\n"), "text/csv");
+}
+
+/* ----------------------------------------------------------------- settings */
+function renderSettings() {
+  const shop = h("input", { value: S.shop }), cur = h("input", { value: S.currency, style: "max-width:120px" });
+  V.main.replaceChildren(h("div", { class: "page", style: "max-width:560px" }, h("div", { class: "card" },
+    h("h3", {}, "Shop"),
+    h("label", { class: "f" }, "Shop name (shown on receipts and on the phones)"), shop,
+    h("label", { class: "f" }, "Currency symbol"), cur,
+    h("button", { class: "btn primary", style: "margin-top:12px", onclick: () => {
+      const b = writeBatch(db);
+      b.set(doc(db, "users", uid, "meta", "shop"), { shopName: shop.value.trim() || "donut4u pos", currency: cur.value.trim() || "₱", updatedAt: Date.now() });
+      b.commit().then(() => toast("Saved")).catch(e => toast("Could not save: " + e.message));
+    } }, "Save")),
+    h("div", { class: "card", style: "margin-top:14px" },
+      h("h3", {}, "Backup"),
+      h("p", { class: "muted" }, "Everything is saved automatically in your cloud. This downloads an extra copy as a file."),
+      h("button", { class: "btn", onclick: () => download("donut4u-backup.json", JSON.stringify({ exportedAt: Date.now(), products: S.products, labels: S.labels, sales: S.sales }, null, 1), "application/json") }, "Download backup file")),
+    h("div", { class: "card", style: "margin-top:14px" },
+      h("h3", {}, "Account"),
+      h("p", { class: "muted" }, "Signed in as " + (S.user && S.user.email) + ". This computer is the selling station. Phones signed in to the same account as \"Monitor phone\" watch the shop live."),
+      h("div", { class: "row" },
+        h("button", { class: "btn", onclick: () => signOut(auth) }, "Sign out"),
+        h("button", { class: "btn", onclick: () => { localStorage.removeItem(CFG_KEY); location.reload(); } }, "Change setup code")))));
+}
+
+boot();
+</script>
+</body>
+</html>
