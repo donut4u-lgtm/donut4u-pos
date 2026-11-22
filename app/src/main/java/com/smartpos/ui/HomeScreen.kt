@@ -1,5 +1,6 @@
 package com.smartpos.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -24,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,7 +80,14 @@ fun HomeScreen(vm: PosViewModel) {
 
     Scaffold(
         topBar = {
+            Box(Modifier.background(Brush.horizontalGradient(listOf(BrandPink, BrandOrange)))) {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                ),
                 title = {
                     Text(
                         if (isMonitor && monitorShop.isNotEmpty()) "$monitorShop (monitor)"
@@ -87,15 +99,22 @@ fun HomeScreen(vm: PosViewModel) {
                     )
                 },
                 actions = {
-                    TextButton(onClick = { showCloud = true }) { Text("Cloud") }
+                    TextButton(
+                        onClick = { showCloud = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) { Text("Cloud", fontWeight = FontWeight.Bold) }
                     if (!isMonitor) {
-                        TextButton(onClick = { showBackup = true }) { Text("Backup") }
+                        TextButton(
+                            onClick = { showBackup = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                        ) { Text("Backup", fontWeight = FontWeight.Bold) }
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     }
                 }
             )
+            }
         },
         bottomBar = {
             if (!isMonitor) {
@@ -115,6 +134,8 @@ fun HomeScreen(vm: PosViewModel) {
             if (!isMonitor && tab == 1) {
                 ExtendedFloatingActionButton(
                     onClick = { vm.screen.value = Screen.AddProduct() },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text("Add product") }
                 )
