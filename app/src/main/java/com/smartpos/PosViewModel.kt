@@ -169,15 +169,11 @@ class PosViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // -------------------------------------------------------------------- cart
 
-    /** Adds one unit. Returns false (and shows a message) if there is not enough stock. */
+    /** Adds one unit. Selling is never blocked by the stock number. */
     fun addToCart(p: Product): Boolean {
         val current = cart.value
         val line = current.firstOrNull { it.product.id == p.id }
-        val have = line?.qty ?: 0
-        if (have + 1 > p.stock) {
-            toast(if (p.stock <= 0) "\"${p.name}\" is out of stock" else "Only ${p.stock} of \"${p.name}\" in stock")
-            return false
-        }
+        // Selling is never blocked by the stock number (stock is only a guide).
         cart.value = if (line == null) {
             current + CartLine(p, 1)
         } else {
@@ -190,7 +186,6 @@ class PosViewModel(private val app: Application) : AndroidViewModel(app) {
         val line = cart.value.firstOrNull { it.product.id == productId } ?: return
         when {
             qty <= 0 -> removeLine(productId)
-            qty > line.product.stock -> toast("Only ${line.product.stock} in stock")
             else -> cart.value = cart.value.map { if (it.product.id == productId) it.copy(qty = qty) else it }
         }
     }
@@ -217,12 +212,9 @@ class PosViewModel(private val app: Application) : AndroidViewModel(app) {
                     val items = ArrayList<SaleItem>()
                     var total = 0.0
                     for (l in lines) {
-                        // Re-read from the database so the latest price/stock is used.
+                        // Re-read from the database so the latest price is used.
                         val fresh = dao.getById(l.product.id)
                             ?: return@withTransaction CheckoutResult.Error("\"${l.product.name}\" was removed")
-                        if (fresh.stock < l.qty) {
-                            return@withTransaction CheckoutResult.Error("Only ${fresh.stock} left of \"${fresh.name}\"")
-                        }
                         items += SaleItem(
                             saleId = 0, productId = fresh.id, name = fresh.name,
                             price = fresh.price, qty = l.qty
