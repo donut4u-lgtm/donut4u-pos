@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.smartpos.PosViewModel
 import com.smartpos.Screen
+import com.smartpos.ads.AdBanner
 import com.smartpos.cloud.Cloud
 import com.smartpos.data.Backup
 import com.smartpos.util.formatDateTime
@@ -170,6 +171,10 @@ fun HomeScreen(vm: PosViewModel) {
                         else -> HistoryTab(vm)
                     }
                 }
+            }
+            // Ads never appear on the Sell screen, so they cannot get in the way of a sale.
+            if (isMonitor || tab != 0) {
+                AdBanner()
             }
         }
     }
