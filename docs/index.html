@@ -105,6 +105,12 @@ td img{width:40px;height:40px;object-fit:cover;border-radius:6px;display:block}
 video{width:100%;border-radius:10px;background:#000;max-height:50vh}
 .receipt{font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;background:var(--bg);padding:14px;border-radius:14px;border:2px dashed var(--line);font-size:13px}
 
+.help h3{margin:18px 0 6px}
+.help ol,.help ul{margin:6px 0 6px 20px;padding:0}
+.help li{margin:4px 0}
+details.guide{margin-top:14px;background:var(--panel);border:2px solid var(--line);border-radius:16px;padding:12px 16px}
+details.guide summary{cursor:pointer;font-weight:800}
+
 @media (max-width:820px){
   .sell{grid-template-columns:1fr;grid-template-rows:60% 40%}
   .right{border-left:0;border-top:1px solid var(--line)}
@@ -280,7 +286,7 @@ function renderSetup(error) {
       const cfg = parseSetup(ta.value);
       if (!cfg) { err.textContent = "The setup code needs the Project ID, the API key (starts with AIza) and the App ID."; return; }
       localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); S.cfg = cfg; boot();
-    } }, "Connect"), err)));
+    } }, "Connect"), err), guideSetup()));
 }
 
 function renderLogin() {
@@ -313,7 +319,7 @@ const V = {};
 function renderShell() {
   V.status = h("span", { class: "pill" });
   V.main = h("div", { id: "main" });
-  const tabs = [["sell", "🛒 Sell"], ["products", "📦 Products"], ["history", "🧾 History"], ["settings", "⚙️ Settings"]];
+  const tabs = [["sell", "🛒 Sell"], ["products", "📦 Products"], ["history", "🧾 History"], ["settings", "⚙️ Settings"], ["help", "❓ Help"]];
   V.nav = h("nav", {}, tabs.map(([k, label]) => h("button", { "data-k": k, class: S.tab === k ? "on" : "", onclick: () => { S.tab = k; renderShell(); } }, label)));
   $app.replaceChildren(
     h("header", {}, h("div", { class: "brand" }, S.shop), V.nav, h("div", { class: "grow" }), V.status),
@@ -325,6 +331,7 @@ function renderTab() {
   if (S.tab === "sell") renderSell();
   else if (S.tab === "products") renderProducts();
   else if (S.tab === "history") renderHistory();
+  else if (S.tab === "help") renderHelp();
   else renderSettings();
 }
 function refresh() {
@@ -727,6 +734,95 @@ function downloadCsv() {
   const rows = [["Sale", "Date", "Item", "Qty", "Price", "Line total", "Sale total"]];
   S.sales.forEach(s => s.items.forEach(i => rows.push([s.id, new Date(s.timestamp).toISOString(), i.name, i.qty, i.price, round2(i.price * i.qty), s.total])));
   download("sales.csv", rows.map(r => r.map(cell).join(",")).join("\n"), "text/csv");
+}
+
+/* --------------------------------------------------------------------- help */
+const RULES_TEXT = "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /users/{userId}/{document=**} {\n      allow read, write: if request.auth != null && request.auth.uid == userId;\n    }\n  }\n}";
+const list = (tag, items) => h(tag, {}, items.map(t => h("li", {}, t)));
+
+function guideSetup() {
+  const last = list("ol", [
+    "Tap the gear icon next to Project Overview, then Project settings. On the General tab you will see the Project ID and the Web API Key (it starts with AIza). Copy both.",
+    "On the same page scroll to Your apps and tap the Android icon. For the package name type com.donut4u.pos. Tap Register app. Then copy the App ID (it looks like 1:123456789:android:abc123). You can skip the other steps.",
+    "Paste the 3 values, one per line, into the setup box: Project ID, API key, App ID. Tap Connect, then Create account with any email and password."
+  ]);
+  last.setAttribute("start", "6");
+  return h("details", { class: "guide" },
+    h("summary", {}, "First time? How to get your setup code (about 10 minutes, free)"),
+    h("p", { class: "muted" }, "Every shop keeps its own data in its own free Google Firebase project. You only do this once."),
+    list("ol", [
+      "On any browser, open console.firebase.google.com and sign in with a Google account.",
+      "Tap Create a project (or Add project). Type a name, for example my-shop-pos. Turn Google Analytics off. Tap Create. Remember the project name: it is your Project ID.",
+      "In the left menu open Build, then Authentication, then Get started. Under Sign-in method choose Email/Password, turn it on, and Save.",
+      "In the left menu open Build, then Firestore Database, then Create database. Choose any location near you and Start in production mode.",
+      "In Firestore, open the Rules tab. Delete everything there, paste the text below, and tap Publish."
+    ]),
+    h("div", { class: "receipt" }, RULES_TEXT),
+    last);
+}
+
+function renderHelp() {
+  V.main.replaceChildren(h("div", { class: "page help", style: "max-width:760px" }, h("div", { class: "card" },
+    h("h2", {}, "How to use donut4u pos"),
+    h("p", { class: "muted" }, "This computer is the selling station. Phones only watch the shop."),
+
+    h("h3", {}, "1. Add your products (Products tab)"),
+    list("ol", [
+      "Tap + Add product.",
+      "Tap Take photo or Choose picture (optional). The app suggests a label. Tap a suggestion or type your own.",
+      "Fill in Name, Price and Stock. Stock is only a guide: you can always sell even if it says 0.",
+      "Barcode: scan it with your scanner or type it. If the product has no barcode, type any short number that no other product uses (1001, 1002, ...).",
+      "Label (column): products with the same label go in the same colored column on the Sell screen. Tap a column's title to change its color.",
+      "Tap Save. Use Edit or Delete in the list to change a product later."
+    ]),
+
+    h("h3", {}, "2. Sell (Sell tab)"),
+    list("ol", [
+      "Scan the barcode, or tap the product on the board. Use the ◀ ▶ arrows to see more columns.",
+      "To find a product fast, type part of its name in the box at the top.",
+      "Tap Charge. Type the cash received, or tap Exact or a quick amount. The change is shown.",
+      "Tap Complete sale. The receipt appears. Tap Print for the receipt printer, or New sale to continue."
+    ]),
+    h("p", { class: "muted" }, "Barcode scanner: plug it in and click the box at the top of the Sell screen once. It types the code by itself, and the product is added to the cart."),
+
+    h("h3", {}, "3. Check your sales (History tab)"),
+    list("ul", [
+      "Today's total and the number of sales are at the top.",
+      "Tap a sale to see its items. Receipt shows it again. Void cancels the sale and puts the items back in stock.",
+      "Download CSV saves the sales as a file you can open in Excel."
+    ]),
+
+    h("h3", {}, "4. Settings"),
+    list("ul", [
+      "Change the shop name and the currency symbol.",
+      "Download backup file saves an extra copy of everything on your computer. Do this now and then.",
+      "Sign out, or Change setup code, only when you really need to."
+    ]),
+
+    h("h3", {}, "5. Watch the shop from a phone"),
+    list("ol", [
+      "Install the donut4u pos app on the phone.",
+      "In the app tap Cloud, paste the same setup code, and sign in with the same email and password.",
+      "Choose Monitor phone. It now shows the shop live: sales, today's total and stock."
+    ]),
+    h("p", { class: "muted" }, "Sell on only one device at a time (this computer). If two devices sell at once their sales can overwrite each other."),
+
+    h("h3", {}, "6. Internet and offline"),
+    list("ul", [
+      "The top bar shows Online, saved when everything is in the cloud.",
+      "If the internet drops, keep selling. Sales are kept on this computer and upload by themselves when the internet returns.",
+      "While offline, do not close the tab or clear the browser data. Wait for Online, saved before you rely on the phone."
+    ]),
+
+    h("h3", {}, "7. Cash drawer and receipt printer"),
+    list("ul", [
+      "Install your printer's driver in Windows and choose that printer when the Print window opens.",
+      "Most cash drawers plug into the printer and open when it prints. In the printer settings, turn on Open drawer on print."
+    ]),
+
+    h("h3", {}, "Starting a new shop?"),
+    guideSetup()
+  )));
 }
 
 /* ----------------------------------------------------------------- settings */
