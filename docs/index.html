@@ -897,6 +897,9 @@ function renderSettings() {
         h("button", { class: "btn", onclick: () => { localStorage.removeItem(CFG_KEY); location.reload(); } }, "Change setup code")))));
 }
 
+// Keep the app files on this device so the website can open with no internet.
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+
 boot();
 </script>
 </body>
