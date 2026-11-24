@@ -105,6 +105,11 @@ td img{width:40px;height:40px;object-fit:cover;border-radius:6px;display:block}
 video{width:100%;border-radius:10px;background:#000;max-height:50vh}
 .receipt{font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;background:var(--bg);padding:14px;border-radius:14px;border:2px dashed var(--line);font-size:13px}
 
+.seg{display:flex;gap:0;border-radius:12px;overflow:hidden;border:2px solid var(--line);flex:0 0 auto}
+.seg button{border:0;background:var(--panel);color:var(--text);padding:10px 16px;font-weight:800}
+.seg button.on{background:var(--grad);color:#fff}
+.seg button.on.w{background:var(--grad2)}
+.tag{display:inline-block;margin-left:8px;padding:1px 10px;border-radius:99px;font-size:12px;font-weight:800;background:var(--grad2);color:#fff}
 .help h3{margin:18px 0 6px}
 .help ol,.help ul{margin:6px 0 6px 20px;padding:0}
 .help li{margin:4px 0}
@@ -196,7 +201,7 @@ const S = {
   cfg: null, user: null, tab: "sell",
   products: [], labels: [], sales: [],
   shop: "donut4u pos", currency: "₱",
-  cart: [], search: "", pending: false,
+  cart: [], search: "", mode: "retail", pending: false,
   lastProductId: 0, lastSaleId: 0
 };
 const CFG_KEY = "donut4u_cfg";
@@ -269,7 +274,7 @@ function subscribe() {
 }
 function normProduct(id, d) {
   return { id: Number(d.id ?? id), barcode: d.barcode || "", name: d.name || "", price: Number(d.price) || 0,
-           stock: Number(d.stock) || 0, label: d.label || "Other", createdAt: Number(d.createdAt) || 0, image: d.image || null };
+           stock: Number(d.stock) || 0, wholesale: Number(d.wholesale) || 0, label: d.label || "Other", createdAt: Number(d.createdAt) || 0, image: d.image || null };
 }
 window.addEventListener("online", () => refresh());
 window.addEventListener("offline", () => refresh());
@@ -350,6 +355,8 @@ function focusSearch() {
 }
 
 /* --------------------------------------------------------------------- sell */
+// Price used right now: wholesale price in Wholesale mode (if the product has one), otherwise the normal price.
+const unit = p => (S.mode === "wholesale" && p.wholesale > 0) ? p.wholesale : p.price;
 function labelIndex(name) { return (S.labels.find(l => l.name === name) || { colorIndex: 0 }).colorIndex; }
 
 function renderSell() {
@@ -362,12 +369,15 @@ function renderSell() {
       if (code.length >= 4) timer = setTimeout(() => { if (V.search.value.trim() === code) scanned(code, false); }, 450);
     },
     onkeydown: e => { if (e.key === "Enter") { clearTimeout(timer); scanned(V.search.value.trim(), true); } } });
+  V.modeRetail = h("button", { onclick: () => setMode("retail") }, "Retail");
+  V.modeWhole = h("button", { onclick: () => setMode("wholesale") }, "Wholesale");
+  V.modeWrap = h("div", { class: "seg" }, V.modeRetail, V.modeWhole);
   V.board = h("div", { class: "board" });
   V.cartLines = h("div", { class: "cartlines" });
   V.total = h("div", { class: "total" });
   V.chargeBtn = h("button", { class: "btn primary charge big", style: "width:100%", onclick: openPay }, "💰 Charge");
   V.main.replaceChildren(h("div", { class: "sell" },
-    h("div", { class: "left" }, V.search, h("div", { class: "boardwrap" }, V.board,
+    h("div", { class: "left" }, h("div", { class: "row" }, h("div", { class: "grow" }, V.search), V.modeWrap), h("div", { class: "boardwrap" }, V.board,
       h("button", { class: "arrow l", title: "Scroll left", onclick: () => V.board.scrollBy({ left: -420 }) }, "◀"),
       h("button", { class: "arrow r", title: "Scroll right", onclick: () => V.board.scrollBy({ left: 420 }) }, "▶"))),
     h("div", { class: "right" },
@@ -375,6 +385,15 @@ function renderSell() {
       V.cartLines,
       h("div", { class: "totalbar" }, V.total, V.chargeBtn,
         h("button", { class: "btn", style: "width:100%;margin-top:8px", onclick: () => { S.cart = []; renderCart(); focusSearch(); } }, "Clear cart")))));
+  setMode(S.mode);
+}
+
+function setMode(m) {
+  S.mode = m;
+  if (V.modeRetail) {
+    V.modeRetail.className = m === "retail" ? "on" : "";
+    V.modeWhole.className = m === "wholesale" ? "on w" : "";
+  }
   renderBoard(); renderCart(); focusSearch();
 }
 
@@ -408,7 +427,7 @@ function renderBoard() {
         h("button", { class: "pcard" + (p.stock <= 0 ? " out" : ""), style: `border-left-color:${c};background:color-mix(in srgb, ${c} 9%, var(--panel))`, onclick: () => { addToCart(p); focusSearch(); } },
           p.image ? h("img", { src: p.image, alt: "" }) : null,
           h("div", { class: "pname" }, p.name),
-          h("div", { class: "pmeta" }, h("span", { class: "pprice" }, money(p.price)), h("span", { class: "pstock" + (p.stock <= 5 ? " low" : "") }, p.stock <= 0 ? "Out" : p.stock + " left"))))));
+          h("div", { class: "pmeta" }, h("span", { class: "pprice" }, money(unit(p))), h("span", { class: "pstock" + (p.stock <= 5 ? " low" : "") }, p.stock <= 0 ? "Out" : p.stock + " left"))))));
   }));
 }
 
@@ -440,15 +459,15 @@ function cartDetail() {
 function renderCart() {
   if (!V.cartLines) return;
   const lines = cartDetail();
-  const total = round2(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
+  const total = round2(lines.reduce((s, l) => s + unit(l.p) * l.qty, 0));
   V.cartLines.replaceChildren(...(lines.length ? lines.map(l =>
     h("div", { class: "line" },
-      h("div", { class: "grow" }, h("div", { class: "pname" }, l.p.name), h("div", { class: "muted" }, money(l.p.price) + " each")),
+      h("div", { class: "grow" }, h("div", { class: "pname" }, l.p.name), h("div", { class: "muted" }, money(unit(l.p)) + " each")),
       h("div", { class: "qty" },
         h("button", { onclick: () => { l.ref.qty--; if (l.ref.qty <= 0) S.cart = S.cart.filter(x => x !== l.ref); renderCart(); focusSearch(); } }, "−"),
         h("b", {}, l.qty),
         h("button", { onclick: () => { addToCart(l.p); focusSearch(); } }, "+")),
-      h("div", { style: "width:84px;text-align:right;font-weight:700" }, money(l.p.price * l.qty)),
+      h("div", { style: "width:84px;text-align:right;font-weight:700" }, money(unit(l.p) * l.qty)),
       h("button", { class: "btn", style: "padding:4px 8px", title: "Remove", onclick: () => { S.cart = S.cart.filter(x => x !== l.ref); renderCart(); focusSearch(); } }, "✕")))
     : [h("div", { class: "muted", style: "margin-top:20px;text-align:center" }, "Scan a barcode or tap a product.")]));
   V.total.replaceChildren(h("span", {}, "Total"), h("span", {}, money(total)));
@@ -458,7 +477,7 @@ function renderCart() {
 function openPay() {
   const lines = cartDetail();
   if (!lines.length) return;
-  const total = round2(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
+  const total = round2(lines.reduce((s, l) => s + unit(l.p) * l.qty, 0));
   const paid = h("input", { type: "number", step: "0.01", min: "0", value: total.toFixed(2), style: "font-size:22px;font-weight:700" });
   const change = h("div", { style: "font-size:22px;font-weight:800;margin-top:10px" });
   const err = h("div", { class: "err" });
@@ -485,23 +504,25 @@ function openPay() {
 
 function completeSale(paid) {
   const lines = cartDetail();
-  const total = round2(lines.reduce((s, l) => s + l.p.price * l.qty, 0));
+  const total = round2(lines.reduce((s, l) => s + unit(l.p) * l.qty, 0));
   const id = ++S.lastSaleId;
   const sale = {
     id, timestamp: Date.now(), total, paid, change: round2(paid - total),
-    items: lines.map((l, i) => ({ id: i + 1, productId: l.p.id, name: l.p.name, price: l.p.price, qty: l.qty }))
+    items: lines.map((l, i) => ({ id: i + 1, productId: l.p.id, name: l.p.name, price: unit(l.p), qty: l.qty })),
+    type: S.mode
   };
   const b = writeBatch(db);
   b.set(dref("sales", id), sale);
   lines.forEach(l => b.update(dref("products", l.p.id), { stock: increment(-l.qty) }));
   b.commit().catch(e => toast("Could not save the sale: " + e.message));
   S.cart = [];
-  renderCart();
+  S.mode = "retail";
+  setMode("retail");
   showReceipt(sale);
 }
 
 function receiptText(sale) {
-  const L = [S.shop, fmtDate(sale.timestamp), "Receipt #" + sale.id, "------------------------------"];
+  const L = [S.shop, fmtDate(sale.timestamp), "Receipt #" + sale.id + (sale.type === "wholesale" ? " (WHOLESALE)" : ""), "------------------------------"];
   sale.items.forEach(i => { L.push(`${i.qty} x ${i.name}`); L.push(`     @ ${money(i.price)} = ${money(i.price * i.qty)}`); });
   L.push("------------------------------", "TOTAL:  " + money(sale.total), "CASH:   " + money(sale.paid), "CHANGE: " + money(sale.change), "", "Thank you!");
   return L.join("\n");
@@ -538,7 +559,7 @@ function renderProductRows() {
       h("td", {}, p.image ? h("img", { src: p.image, alt: "" }) : null),
       h("td", {}, h("b", {}, p.name)), h("td", { class: "muted" }, p.barcode),
       h("td", {}, h("span", { class: "chip", style: `background:${c};color:${onColor(c)}` }, p.label)),
-      h("td", {}, money(p.price)),
+      h("td", {}, money(p.price), p.wholesale > 0 ? h("div", { class: "muted", style: "font-size:12px" }, "Wholesale " + money(p.wholesale)) : null),
       h("td", { style: p.stock <= 5 ? "color:var(--warn);font-weight:700" : "" }, p.stock),
       h("td", { style: "white-space:nowrap;text-align:right" },
         h("button", { class: "btn", onclick: () => openProductForm(p) }, "Edit"), " ",
@@ -568,8 +589,9 @@ function nextFreeColor() {
 function openProductForm(p, barcode) {
   const f = {
     name: h("input", { value: p ? p.name : "", placeholder: "e.g. Glazed donut" }),
-    barcode: h("input", { value: p ? p.barcode : (barcode || ""), placeholder: "Scan with your scanner, or type" }),
+    barcode: h("input", { value: p ? p.barcode : (barcode || ""), placeholder: "Scan, type, or leave blank" }),
     price: h("input", { type: "number", step: "0.01", min: "0", value: p ? p.price : "" }),
+    wholesale: h("input", { type: "number", step: "0.01", min: "0", value: p && p.wholesale > 0 ? p.wholesale : "", placeholder: "optional" }),
     stock: h("input", { type: "number", step: "1", min: "0", value: p ? p.stock : "" }),
     label: h("input", { value: p ? p.label : "", list: "labelopts", placeholder: "Column name, e.g. Donuts" })
   };
@@ -594,15 +616,23 @@ function openProductForm(p, barcode) {
   } });
   const save = () => {
     err.textContent = "";
-    const name = f.name.value.trim(), code = f.barcode.value.trim();
+    const name = f.name.value.trim();
+    let code = f.barcode.value.trim();
     const price = parseFloat(String(f.price.value).replace(",", ".")), stock = parseInt(f.stock.value, 10);
     if (!name) { err.textContent = "Enter the product name."; return; }
     if (!(price >= 0)) { err.textContent = "Enter the price."; return; }
     if (!(stock >= 0)) { err.textContent = "Enter the stock (0 or more)."; return; }
+    const wholesale = f.wholesale.value === "" ? 0 : parseFloat(String(f.wholesale.value).replace(",", "."));
+    if (!(wholesale >= 0)) { err.textContent = "The wholesale price must be 0 or more (or leave it blank)."; return; }
     if (code && S.products.some(x => x.barcode === code && (!p || x.id !== p.id))) { err.textContent = "Another product already uses that barcode."; return; }
     const label = canonicalLabel(f.label.value);
     const id = p ? p.id : ++S.lastProductId;
-    const data = { id, barcode: code, name, price, stock, label, createdAt: p ? p.createdAt : Date.now() };
+    if (!code) {
+      // No barcode typed: give the product its own number (P0001, P0002, ...).
+      let n = id;
+      do { code = "P" + String(n).padStart(4, "0"); n++; } while (S.products.some(x => x.barcode === code && x.id !== id));
+    }
+    const data = { id, barcode: code, name, price, wholesale, stock, label, createdAt: p ? p.createdAt : Date.now() };
     if (image) data.image = image;
     const b = writeBatch(db);
     b.set(dref("products", id), data, { merge: true });
@@ -620,7 +650,8 @@ function openProductForm(p, barcode) {
     h("label", { class: "f" }, "Name"), f.name,
     h("label", { class: "f" }, "Barcode"), f.barcode,
     h("div", { class: "row" },
-      h("div", { class: "grow" }, h("label", { class: "f" }, "Price"), f.price),
+      h("div", { class: "grow" }, h("label", { class: "f" }, "Retail price"), f.price),
+      h("div", { class: "grow" }, h("label", { class: "f" }, "Wholesale price"), f.wholesale),
       h("div", { class: "grow" }, h("label", { class: "f" }, "Stock"), f.stock)),
     h("label", { class: "f" }, "Label (column)"), f.label,
     h("datalist", { id: "labelopts" }, S.labels.map(l => h("option", { value: l.name }))),
@@ -709,7 +740,7 @@ function renderHistoryRows() {
     const open = openSale === s.id;
     return h("div", { class: "sale", onclick: () => { openSale = open ? null : s.id; renderHistoryRows(); } },
       h("div", { class: "row" },
-        h("div", { class: "grow" }, h("b", {}, "Sale #" + s.id), h("div", { class: "muted" }, fmtDate(s.timestamp))),
+        h("div", { class: "grow" }, h("div", {}, h("b", {}, "Sale #" + s.id), s.type === "wholesale" ? h("span", { class: "tag" }, "Wholesale") : null), h("div", { class: "muted" }, fmtDate(s.timestamp))),
         h("b", { style: "font-size:17px" }, money(s.total))),
       open ? h("div", { class: "items", onclick: e => e.stopPropagation() },
         s.items.map(i => h("div", { class: "row" }, h("span", { class: "grow" }, `${i.qty} × ${i.name}`), h("span", {}, money(i.price * i.qty)))),
@@ -731,8 +762,8 @@ function download(name, text, type) {
 }
 function downloadCsv() {
   const cell = v => { const s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const rows = [["Sale", "Date", "Item", "Qty", "Price", "Line total", "Sale total"]];
-  S.sales.forEach(s => s.items.forEach(i => rows.push([s.id, new Date(s.timestamp).toISOString(), i.name, i.qty, i.price, round2(i.price * i.qty), s.total])));
+  const rows = [["Sale", "Date", "Item", "Qty", "Price", "Line total", "Sale total", "Type"]];
+  S.sales.forEach(s => s.items.forEach(i => rows.push([s.id, new Date(s.timestamp).toISOString(), i.name, i.qty, i.price, round2(i.price * i.qty), s.total, s.type || "retail"])));
   download("sales.csv", rows.map(r => r.map(cell).join(",")).join("\n"), "text/csv");
 }
 
@@ -770,8 +801,9 @@ function renderHelp() {
     list("ol", [
       "Tap + Add product.",
       "Tap Take photo or Choose picture (optional). The app suggests a label. Tap a suggestion or type your own.",
-      "Fill in Name, Price and Stock. Stock is only a guide: you can always sell even if it says 0.",
-      "Barcode: scan it with your scanner or type it. If the product has no barcode, type any short number that no other product uses (1001, 1002, ...).",
+      "Fill in Name, Retail price and Stock. Stock is only a guide: you can always sell even if it says 0.",
+      "Wholesale price is optional. If you leave it blank, the product uses its retail price in Wholesale mode too.",
+      "Barcode: scan it with your scanner or type it. If the product has no barcode, leave it blank. The app gives it its own number (P0001, P0002, ...).",
       "Label (column): products with the same label go in the same colored column on the Sell screen. Tap a column's title to change its color.",
       "Tap Save. Use Edit or Delete in the list to change a product later."
     ]),
@@ -780,6 +812,7 @@ function renderHelp() {
     list("ol", [
       "Scan the barcode, or tap the product on the board. Use the ◀ ▶ arrows to see more columns.",
       "To find a product fast, type part of its name in the box at the top.",
+      "Retail and Wholesale buttons (next to the search box) change the price of everything in the cart. After each sale it returns to Retail by itself.",
       "Tap Charge. Type the cash received, or tap Exact or a quick amount. The change is shown.",
       "Tap Complete sale. The receipt appears. Tap Print for the receipt printer, or New sale to continue."
     ]),
