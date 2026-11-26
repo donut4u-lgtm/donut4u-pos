@@ -1,0 +1,7 @@
+> Task :app:compileDebugKotlin FAILED
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/PosViewModel.kt:51:19 Unresolved reference 'remoteMeta'.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/PosViewModel.kt:51:40 Cannot infer type for this parameter. Please specify it explicitly.
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/PosViewModel.kt:51:40 Function 'component1()' is ambiguous for this expression: 
+e: file:///home/runner/work/donut4u-pos/donut4u-pos/app/src/main/java/com/smartpos/PosViewModel.kt:51:40 Function 'component2()' is ambiguous for this expression: 
+* What went wrong:
+BUILD FAILED in 46s
