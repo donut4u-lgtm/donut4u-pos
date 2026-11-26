@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
+import com.smartpos.cloud.Cloud
 import com.smartpos.data.AppSettings
 import com.smartpos.data.LABEL_COLOR_COUNT
 import com.smartpos.data.LabelEntity
@@ -43,6 +44,17 @@ class PosViewModel(private val app: Application) : AndroidViewModel(app) {
     private val db = PosDatabase.get(app)
     private val dao = db.dao()
     val settings = AppSettings(app)
+
+    init {
+        // Shop name / currency changed on the website (or another phone): show it here too.
+        viewModelScope.launch {
+            Cloud.remoteMeta.collect { (shop, symbol) ->
+                val s = shop.trim().ifEmpty { "donut4u pos" }
+                val c = symbol.trim()
+                if (settings.shopName.value != s || settings.currency.value != c) settings.save(s, c)
+            }
+        }
+    }
 
     // ---- UI state ----
     val screen = MutableStateFlow<Screen>(Screen.Home)
@@ -108,6 +120,7 @@ class PosViewModel(private val app: Application) : AndroidViewModel(app) {
         name: String,
         label: String,
         price: Double,
+        wholesale: Double,
         stock: Int,
         imagePath: String?,
         onDone: (Boolean) -> Unit
@@ -133,14 +146,14 @@ class PosViewModel(private val app: Application) : AndroidViewModel(app) {
                     if (existing == null) {
                         dao.insertProduct(
                             Product(
-                                barcode = code, name = cleanName, price = price, stock = stock,
+                                barcode = code, name = cleanName, price = price, wholesale = wholesale, stock = stock,
                                 label = labelName, imagePath = imagePath
                             )
                         )
                     } else {
                         dao.updateProduct(
                             existing.copy(
-                                barcode = code, name = cleanName, price = price,
+                                barcode = code, name = cleanName, price = price, wholesale = wholesale,
                                 stock = stock, label = labelName
                             )
                         )
