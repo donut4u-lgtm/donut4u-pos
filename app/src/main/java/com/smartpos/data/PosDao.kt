@@ -45,6 +45,9 @@ interface PosDao {
     @Query("UPDATE labels SET colorIndex = :idx WHERE name = :name")
     suspend fun setLabelColor(name: String, idx: Int)
 
+    @Query("DELETE FROM labels WHERE name = :name")
+    suspend fun deleteLabel(name: String)
+
     // ---- Sales ----
     @Insert
     suspend fun insertSale(s: Sale): Long
