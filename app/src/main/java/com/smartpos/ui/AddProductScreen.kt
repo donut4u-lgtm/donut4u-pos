@@ -198,14 +198,15 @@ fun AddProductScreen(vm: PosViewModel, prefillBarcode: String?) {
                         initialName = "",
                         initialLabel = chosenLabel,
                         initialPrice = "",
+                        initialWholesale = "",
                         initialStock = "1",
                         suggestions = suggestions,
                         labels = labels,
                         colorIndexFor = { vm.colorIndexFor(it) },
                         currency = currency,
                         saveText = "Save product",
-                        onSave = { code, name, label, price, stock ->
-                            vm.saveProduct(null, code, name, label, price, stock, photoPath) { ok ->
+                        onSave = { code, name, label, price, wholesale, stock ->
+                            vm.saveProduct(null, code, name, label, price, wholesale, stock, photoPath) { ok ->
                                 if (ok) {
                                     saved = true
                                     vm.toast("Saved \"${name.trim()}\"")
