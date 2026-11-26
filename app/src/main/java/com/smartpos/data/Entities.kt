@@ -29,7 +29,8 @@ data class Product(
     val stock: Int,
     val label: String,
     val imagePath: String?,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val wholesale: Double = 0.0
 )
 
 @Entity(tableName = "sales")
@@ -38,7 +39,9 @@ data class Sale(
     val timestamp: Long,
     val total: Double,
     val paid: Double,
-    val change: Double
+    val change: Double,
+    /** "retail" or "wholesale" */
+    val type: String = "retail"
 )
 
 @Entity(
