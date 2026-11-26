@@ -48,13 +48,14 @@ fun ProductForm(
     initialName: String,
     initialLabel: String,
     initialPrice: String,
+    initialWholesale: String,
     initialStock: String,
     suggestions: List<String>,
     labels: List<LabelEntity>,
     colorIndexFor: (String) -> Int,
     currency: String,
     saveText: String,
-    onSave: (barcode: String, name: String, label: String, price: Double, stock: Int) -> Unit,
+    onSave: (barcode: String, name: String, label: String, price: Double, wholesale: Double, stock: Int) -> Unit,
     modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null
 ) {
@@ -62,6 +63,7 @@ fun ProductForm(
     var name by remember { mutableStateOf(initialName) }
     var label by remember { mutableStateOf(initialLabel) }
     var price by remember { mutableStateOf(initialPrice) }
+    var wholesale by remember { mutableStateOf(initialWholesale) }
     var stock by remember { mutableStateOf(initialStock) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -155,6 +157,18 @@ fun ProductForm(
             )
         }
 
+        OutlinedTextField(
+            value = wholesale,
+            onValueChange = { raw ->
+                wholesale = raw.replace(',', '.').filter { c -> c.isDigit() || c == '.' }
+                error = null
+            },
+            label = { Text("Wholesale price ($currency), optional") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth()
+        )
+
         error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
         }
@@ -162,12 +176,14 @@ fun ProductForm(
         Button(
             onClick = {
                 val p = price.toDoubleOrNull()
+                val w = if (wholesale.isBlank()) 0.0 else wholesale.toDoubleOrNull()
                 val s = stock.toIntOrNull() ?: 0
                 when {
                     name.isBlank() -> error = "Enter a product name"
                     barcode.isBlank() -> error = "Enter or scan a barcode"
                     p == null || p < 0 -> error = "Enter a valid price"
-                    else -> onSave(barcode, name, label, p, s)
+                    w == null || w < 0 -> error = "Enter a valid wholesale price (or leave it blank)"
+                    else -> onSave(barcode, name, label, p, w, s)
                 }
             },
             modifier = Modifier.fillMaxWidth().height(52.dp)
