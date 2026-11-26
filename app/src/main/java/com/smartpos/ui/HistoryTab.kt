@@ -121,7 +121,7 @@ fun HistoryTab(vm: PosViewModel) {
                 Column(Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Sale #${s.sale.id}", fontWeight = FontWeight.SemiBold)
+                            Text("Sale #${s.sale.id}" + if (s.sale.type == "wholesale") " · Wholesale" else "", fontWeight = FontWeight.SemiBold)
                             Text(
                                 formatDateTime(s.sale.timestamp),
                                 style = MaterialTheme.typography.bodySmall,
