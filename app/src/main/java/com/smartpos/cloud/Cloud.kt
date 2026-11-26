@@ -6,13 +6,16 @@ import androidx.room.withTransaction
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.WriteBatch
 import com.smartpos.data.LabelEntity
+import com.smartpos.data.PosDao
 import com.smartpos.data.PosDatabase
 import com.smartpos.data.Product
 import com.smartpos.data.Sale
@@ -26,13 +29,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /**
  * Optional online mode, using the shop owner's OWN Firebase project.
- *  - SELLER phone: keeps working from its local database and uploads every change to the cloud.
+ *  - SELLER phone: keeps working from its local database, uploads every change to the cloud AND
+ *    downloads changes made elsewhere (the website or another seller), so both stay the same.
  *  - MONITOR phone: shows the shop live (read-only) from the cloud.
  * All data lives under  users/{uid}/...  and the security rules let only that user read it.
  */
@@ -296,6 +302,8 @@ object Cloud {
             val dao = PosDatabase.get(context).dao()
             val prefs = prefs(context)
             val base = fs.collection("users").document(uid)
+            val regs = ArrayList<ListenerRegistration>()
+            val lock = Mutex()
 
             // Safety on a fresh install: never overwrite existing cloud data with an empty phone.
             while (!prefs.getBoolean("init_$uid", false)) {
@@ -337,7 +345,7 @@ object Cloud {
                 coroutineScope {
                     // Products: upload only what changed.
                     launch {
-                        dao.observeProducts().collect { list ->
+                        dao.observeProducts().collect { list -> lock.withLock {
                             val hashes = loadMap(prefs, "ph_$uid")
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             val ids = HashSet<String>()
@@ -349,7 +357,7 @@ object Cloud {
                                     hashes[id] = h
                                     val ref = base.collection("products").document(id)
                                     val data = productMap(p)
-                                    ops.add { b -> b.set(ref, data) }
+                                    ops.add { b -> b.set(ref, data, SetOptions.merge()) }
                                 }
                             }
                             for (id in hashes.keys.toList()) {
@@ -363,11 +371,11 @@ object Cloud {
                                 commit(fs, ops)
                                 saveMap(prefs, "ph_$uid", hashes)
                             }
-                        }
+                        } }
                     }
                     // Labels (columns and their colors)
                     launch {
-                        dao.observeLabels().collect { list ->
+                        dao.observeLabels().collect { list -> lock.withLock {
                             val hashes = loadMap(prefs, "lh_$uid")
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             val ids = HashSet<String>()
@@ -393,12 +401,12 @@ object Cloud {
                                 commit(fs, ops)
                                 saveMap(prefs, "lh_$uid", hashes)
                             }
-                        }
+                        } }
                     }
                     // Sales: upload new ones, remove voided ones.
                     launch {
                         var previousIds = emptySet<Long>()
-                        dao.observeSales().collect { list ->
+                        dao.observeSales().collect { list -> lock.withLock {
                             val lastUploaded = prefs.getLong("ls_$uid", 0L)
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             var maxId = lastUploaded
@@ -406,7 +414,7 @@ object Cloud {
                                 if (s.sale.id > lastUploaded) {
                                     val ref = base.collection("sales").document(s.sale.id.toString())
                                     val data = saleMap(s)
-                                    ops.add { b -> b.set(ref, data) }
+                                    ops.add { b -> b.set(ref, data, SetOptions.merge()) }
                                     if (s.sale.id > maxId) maxId = s.sale.id
                                 }
                             }
@@ -425,10 +433,43 @@ object Cloud {
                                 commit(fs, ops)
                                 prefs.edit().putLong("ls_$uid", maxId).apply()
                             }
+                        } }
+                    }
+
+                    // DOWNLOAD: apply changes made on the website (or another phone) to this phone.
+                    val scope = this
+                    fun handle(what: String, snap: com.google.firebase.firestore.QuerySnapshot?, err: Exception?,
+                               block: suspend (List<DocumentChange>) -> Unit) {
+                        if (err != null) {
+                            setStatus("Cloud problem ($what): ${err.message}")
+                            return
                         }
+                        val changes = snap?.documentChanges?.toList() ?: return
+                        if (changes.isEmpty()) return
+                        scope.launch {
+                            lock.withLock {
+                                try {
+                                    block(changes)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    setStatus("Cloud problem ($what): ${e.message}")
+                                }
+                            }
+                        }
+                    }
+                    regs += base.collection("products").addSnapshotListener { snap, err ->
+                        handle("products", snap, err) { applyRemoteProducts(dao, prefs, uid, it) }
+                    }
+                    regs += base.collection("labels").addSnapshotListener { snap, err ->
+                        handle("labels", snap, err) { applyRemoteLabels(dao, prefs, uid, it) }
+                    }
+                    regs += base.collection("sales").addSnapshotListener { snap, err ->
+                        handle("sales", snap, err) { applyRemoteSales(dao, it) }
                     }
                 }
             } finally {
+                regs.forEach { it.remove() }
                 settingsPrefs.unregisterOnSharedPreferenceChangeListener(listener)
             }
         } catch (e: CancellationException) {
@@ -437,6 +478,91 @@ object Cloud {
             setStatus("Cloud problem: ${e.message}")
         }
     }
+
+    // ------------------------------------------------- download (cloud -> phone)
+
+    private suspend fun applyRemoteProducts(
+        dao: PosDao, prefs: SharedPreferences, uid: String, changes: List<DocumentChange>
+    ) {
+        val hashes = loadMap(prefs, "ph_$uid")
+        var dirty = false
+        for (c in changes) {
+            val d = c.document
+            if (d.metadata.hasPendingWrites()) continue // this phone's own upload, not news
+            if (c.type == DocumentChange.Type.REMOVED) {
+                val id = d.getLong("id") ?: d.id.toLongOrNull()
+                if (id != null) {
+                    hashes.remove(id.toString())
+                    dao.deleteProduct(id)
+                    dirty = true
+                }
+                continue
+            }
+            val remote = productFrom(d) ?: continue
+            val key = remote.id.toString()
+            val local = dao.getById(remote.id)
+            if (local != null) {
+                // Never overwrite a change on this phone that has not been uploaded yet.
+                if (hashes[key] != productHash(local)) continue
+                if (productHash(local) == productHash(remote)) continue
+            }
+            // Never create two products with the same barcode.
+            val sameBarcode = dao.findByBarcode(remote.barcode)
+            if (sameBarcode != null && sameBarcode.id != remote.id) continue
+            hashes[key] = productHash(remote)
+            dao.restoreProducts(listOf(remote.copy(imagePath = local?.imagePath)))
+            dirty = true
+        }
+        if (dirty) saveMap(prefs, "ph_$uid", hashes)
+    }
+
+    private suspend fun applyRemoteLabels(
+        dao: PosDao, prefs: SharedPreferences, uid: String, changes: List<DocumentChange>
+    ) {
+        val hashes = loadMap(prefs, "lh_$uid")
+        var dirty = false
+        for (c in changes) {
+            val d = c.document
+            if (d.metadata.hasPendingWrites() || c.type == DocumentChange.Type.REMOVED) continue
+            val remote = labelFrom(d) ?: continue
+            val key = labelId(remote.name)
+            val local = dao.allLabels().firstOrNull { it.name == remote.name }
+            if (local == null) {
+                dao.insertLabel(remote)
+            } else {
+                if (hashes[key] != "${local.name}|${local.colorIndex}") continue // local change waiting to upload
+                if (local.colorIndex != remote.colorIndex) dao.setLabelColor(remote.name, remote.colorIndex)
+            }
+            hashes[key] = "${remote.name}|${remote.colorIndex}"
+            dirty = true
+        }
+        if (dirty) saveMap(prefs, "lh_$uid", hashes)
+    }
+
+    private suspend fun applyRemoteSales(dao: PosDao, changes: List<DocumentChange>) {
+        var existing: Map<Long, SaleWithItems>? = null
+        for (c in changes) {
+            val d = c.document
+            if (d.metadata.hasPendingWrites()) continue
+            if (c.type == DocumentChange.Type.REMOVED) {
+                val id = d.getLong("id") ?: d.id.toLongOrNull()
+                if (id != null) dao.deleteSale(id)
+                continue
+            }
+            val remote = saleFrom(d) ?: continue
+            if (existing == null) existing = dao.allSales().associateBy { it.sale.id }
+            val local = existing[remote.sale.id]
+            if (local != null &&
+                local.sale.total == remote.sale.total &&
+                local.sale.timestamp == remote.sale.timestamp &&
+                local.items.size == remote.items.size
+            ) continue
+            // REPLACE removes the old copy of this sale (and its items), then the new items are added.
+            dao.restoreSales(listOf(remote.sale))
+            dao.restoreSaleItems(remote.items.map { it.copy(id = 0L) })
+        }
+    }
+
 
     /** Replaces everything on this phone with the data stored in the cloud (for a new or repaired phone). */
     suspend fun restoreFromCloud(context: Context): String? {
@@ -459,7 +585,7 @@ object Cloud {
                 dao.restoreLabels(labels)
                 dao.restoreProducts(products)
                 dao.restoreSales(sales.map { it.sale })
-                dao.restoreSaleItems(sales.flatMap { it.items })
+                dao.restoreSaleItems(sales.flatMap { it.items }.map { it.copy(id = 0L) })
             }
 
             // Remember that all of this is already in the cloud, so nothing is uploaded twice.
