@@ -203,6 +203,16 @@ object Cloud {
 
     private fun labelId(name: String): String = "l_" + name.replace('/', '_')
 
+    /** Same numbering the website uses for a product that has no barcode: P0001, P0002, ... */
+    private fun fallbackBarcode(id: Long): String = "P" + id.toString().padStart(4, '0')
+
+    /** A barcode that no other product on this phone uses. */
+    private suspend fun freeBarcode(dao: PosDao, id: Long): String {
+        var code = fallbackBarcode(id)
+        while (dao.findByBarcode(code)?.let { it.id != id } == true) code += "-"
+        return code
+    }
+
     private fun productHash(p: Product) = "${p.barcode}|${p.name}|${p.price}|${p.wholesale}|${p.stock}|${p.label}"
 
     private fun productMap(p: Product): Map<String, Any> = hashMapOf(
@@ -238,7 +248,7 @@ object Cloud {
         val id = d.getLong("id") ?: return null
         return Product(
             id = id,
-            barcode = d.getString("barcode") ?: "",
+            barcode = d.getString("barcode")?.takeIf { it.isNotBlank() } ?: fallbackBarcode(id),
             name = d.getString("name") ?: "",
             price = d.getDouble("price") ?: 0.0,
             wholesale = d.getDouble("wholesale") ?: 0.0,
@@ -642,10 +652,15 @@ object Cloud {
             val applyImage = imageChanged && !imageWaiting
             if (!applyFields && !applyImage) continue
 
+            var incoming = remote
+            var needsFix = d.getString("barcode").isNullOrBlank()
             if (applyFields) {
-                // Never create two products with the same barcode.
-                val sameBarcode = dao.findByBarcode(remote.barcode)
-                if (sameBarcode != null && sameBarcode.id != remote.id) continue
+                // Two products must never share a barcode: give this one its own number instead of hiding it.
+                val sameBarcode = dao.findByBarcode(incoming.barcode)
+                if (sameBarcode != null && sameBarcode.id != incoming.id) {
+                    incoming = incoming.copy(barcode = freeBarcode(dao, incoming.id))
+                    needsFix = true
+                }
             }
             var imagePath = local?.imagePath
             if (applyImage && img != null && imgKey != null) {
@@ -657,8 +672,11 @@ object Cloud {
                 }
                 seen[key] = imgKey
             }
-            val target = if (applyFields || local == null) remote else local
-            if (applyFields) hashes[key] = productHash(remote)
+            val target = if (applyFields || local == null) incoming else local
+            if (applyFields) {
+                // A product that got a new barcode is sent back to the cloud so the website shows it too.
+                if (needsFix) hashes.remove(key) else hashes[key] = productHash(incoming)
+            }
             dao.restoreProducts(listOf(target.copy(imagePath = imagePath)))
             dirty = true
         }
@@ -738,9 +756,11 @@ object Cloud {
             val productDocs = base.collection("products").get(Source.SERVER).await().documents
             val sentMap = HashMap<String, String>()
             val seenMap = HashMap<String, String>()
-            val products = withContext(Dispatchers.IO) {
+            val needFix = HashSet<String>()
+            val rawProducts = withContext(Dispatchers.IO) {
                 productDocs.mapNotNull { d ->
                     val p = productFrom(d) ?: return@mapNotNull null
+                    if (d.getString("barcode").isNullOrBlank()) needFix += p.id.toString()
                     val img = d.getString("image")
                     val path = if (img != null && img.startsWith("data:image")) saveCloudImage(context, p.id, img) else null
                     if (path != null && img != null) {
@@ -748,6 +768,16 @@ object Cloud {
                         seenMap[p.id.toString()] = imageKey(img)
                     }
                     p.copy(imagePath = path)
+                }
+            }
+            // Two products with the same barcode would erase each other: keep both.
+            val usedCodes = HashSet<String>()
+            val products = rawProducts.map { p ->
+                if (usedCodes.add(p.barcode)) {
+                    p
+                } else {
+                    needFix += p.id.toString()
+                    p.copy(barcode = fallbackBarcode(p.id) + "-d")
                 }
             }
             val labels = base.collection("labels").get(Source.SERVER).await().documents.mapNotNull { labelFrom(it) }
@@ -769,7 +799,7 @@ object Cloud {
             // Remember that all of this is already in the cloud, so nothing is uploaded twice.
             val prefs = prefs(context)
             val productHashes = HashMap<String, String>()
-            products.forEach { productHashes[it.id.toString()] = productHash(it) }
+            products.forEach { if (it.id.toString() !in needFix) productHashes[it.id.toString()] = productHash(it) }
             saveMap(prefs, "ph_$uid", productHashes)
             saveMap(prefs, "pi_$uid", sentMap)
             saveMap(prefs, "ih_$uid", seenMap)
