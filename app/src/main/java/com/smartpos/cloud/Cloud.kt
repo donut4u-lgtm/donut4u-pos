@@ -1,6 +1,11 @@
 package com.smartpos.cloud
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
+import android.util.Base64
 import android.content.SharedPreferences
 import androidx.room.withTransaction
 import com.google.firebase.FirebaseApp
@@ -23,17 +28,22 @@ import com.smartpos.data.SaleItem
 import com.smartpos.data.SaleWithItems
 import com.smartpos.util.formatTime
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 /**
  * Optional online mode, using the shop owner's OWN Firebase project.
@@ -62,6 +72,9 @@ object Cloud {
 
     /** Bumped to restart the seller sync (for example after a restore). */
     val syncTick = MutableStateFlow(0)
+
+    /** Shop name and currency symbol changed in the cloud (website or another phone). */
+    val remoteMeta = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 8)
 
     // Data shown on the monitor phone
     val monitorProducts = MutableStateFlow<List<Product>>(emptyList())
@@ -190,13 +203,14 @@ object Cloud {
 
     private fun labelId(name: String): String = "l_" + name.replace('/', '_')
 
-    private fun productHash(p: Product) = "${p.barcode}|${p.name}|${p.price}|${p.stock}|${p.label}"
+    private fun productHash(p: Product) = "${p.barcode}|${p.name}|${p.price}|${p.wholesale}|${p.stock}|${p.label}"
 
     private fun productMap(p: Product): Map<String, Any> = hashMapOf(
         "id" to p.id,
         "barcode" to p.barcode,
         "name" to p.name,
         "price" to p.price,
+        "wholesale" to p.wholesale,
         "stock" to p.stock,
         "label" to p.label,
         "createdAt" to p.createdAt
@@ -208,6 +222,7 @@ object Cloud {
         "total" to s.sale.total,
         "paid" to s.sale.paid,
         "change" to s.sale.change,
+        "type" to s.sale.type,
         "items" to s.items.map {
             hashMapOf<String, Any>(
                 "id" to it.id,
@@ -226,6 +241,7 @@ object Cloud {
             barcode = d.getString("barcode") ?: "",
             name = d.getString("name") ?: "",
             price = d.getDouble("price") ?: 0.0,
+            wholesale = d.getDouble("wholesale") ?: 0.0,
             stock = (d.getLong("stock") ?: 0L).toInt(),
             label = d.getString("label") ?: "Other",
             imagePath = null,
@@ -245,7 +261,8 @@ object Cloud {
             timestamp = d.getLong("timestamp") ?: 0L,
             total = d.getDouble("total") ?: 0.0,
             paid = d.getDouble("paid") ?: 0.0,
-            change = d.getDouble("change") ?: 0.0
+            change = d.getDouble("change") ?: 0.0,
+            type = d.getString("type") ?: "retail"
         )
         val raw = d.get("items") as? List<*> ?: emptyList<Any>()
         val items = raw.mapNotNull { entry ->
@@ -280,9 +297,67 @@ object Cloud {
         prefs.edit().putString(key, JSONObject(map).toString()).apply()
     }
 
+    // ------------------------------------------------------------ pictures
+
+    /** Same size and format the website uses: a small JPEG (longest side 320 px) as a data URL. */
+    private fun encodeImage(path: String): String? {
+        return try {
+            if (!File(path).exists()) return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 320) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            var bmp = BitmapFactory.decodeFile(path, opts) ?: return null
+            val rotation = try {
+                when (ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
+            } catch (e: Exception) {
+                0f
+            }
+            if (rotation != 0f) {
+                val m = Matrix().apply { postRotate(rotation) }
+                bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            }
+            val k = minOf(1f, 320f / maxOf(bmp.width, bmp.height))
+            val scaled = if (k < 1f) {
+                Bitmap.createScaledBitmap(bmp, Math.round(bmp.width * k), Math.round(bmp.height * k), true)
+            } else {
+                bmp
+            }
+            val out = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 72, out)
+            "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Saves a picture that came from the cloud as a file on this phone. Returns its path. */
+    private fun saveCloudImage(context: Context, id: Long, dataUrl: String): String? {
+        return try {
+            val comma = dataUrl.indexOf(',')
+            if (!dataUrl.startsWith("data:image") || comma < 0) return null
+            val bytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT)
+            val dir = File(context.applicationContext.filesDir, "product_images").apply { mkdirs() }
+            val file = File(dir, "c_${id}_${System.currentTimeMillis()}.jpg")
+            file.writeBytes(bytes)
+            file.absolutePath
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun imageKey(dataUrl: String) = "${dataUrl.length}:${dataUrl.hashCode()}"
+
     private fun commit(fs: FirebaseFirestore, ops: List<(WriteBatch) -> Unit>) {
         if (ops.isEmpty()) return
-        for (chunk in ops.chunked(400)) {
+        for (chunk in ops.chunked(100)) {
             val batch = fs.batch()
             chunk.forEach { it(batch) }
             batch.commit()
@@ -339,7 +414,28 @@ object Cloud {
             }
             val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> uploadMeta() }
             settingsPrefs.registerOnSharedPreferenceChangeListener(listener)
-            uploadMeta()
+            val metaRef = base.collection("meta").document("shop")
+            // If the cloud already has a shop name, the cloud wins (it is delivered below). Otherwise send ours.
+            val cloudMeta = try {
+                withTimeoutOrNull(8_000L) { metaRef.get(Source.SERVER).await() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null // offline right now: keep going, the live listener below will catch up
+            }
+            if (cloudMeta != null && !cloudMeta.exists()) uploadMeta()
+
+            // One-time: the saved fingerprints now include the wholesale price. Convert them so
+            // products that did not change are not uploaded again.
+            if (!prefs.getBoolean("hv2_$uid", false)) {
+                val old = loadMap(prefs, "ph_$uid")
+                for (p in dao.allProducts()) {
+                    val oldHash = "${p.barcode}|${p.name}|${p.price}|${p.stock}|${p.label}"
+                    if (old[p.id.toString()] == oldHash) old[p.id.toString()] = productHash(p)
+                }
+                saveMap(prefs, "ph_$uid", old)
+                prefs.edit().putBoolean("hv2_$uid", true).apply()
+            }
 
             try {
                 coroutineScope {
@@ -349,15 +445,33 @@ object Cloud {
                             val hashes = loadMap(prefs, "ph_$uid")
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             val ids = HashSet<String>()
+                            val sent = loadMap(prefs, "pi_$uid")
+                            var sentChanged = false
                             for (p in list) {
                                 val id = p.id.toString()
                                 ids += id
                                 val h = productHash(p)
+                                val path = p.imagePath
+                                val imageDue = path != null && sent[id] != path
+                                val ref = base.collection("products").document(id)
                                 if (hashes[id] != h) {
                                     hashes[id] = h
-                                    val ref = base.collection("products").document(id)
-                                    val data = productMap(p)
+                                    val data = HashMap<String, Any>(productMap(p))
+                                    if (path != null && imageDue) {
+                                        val img = withContext(Dispatchers.IO) { encodeImage(path) }
+                                        sent[id] = path
+                                        sentChanged = true
+                                        if (img != null) data["image"] = img
+                                    }
                                     ops.add { b -> b.set(ref, data, SetOptions.merge()) }
+                                } else if (path != null && imageDue) {
+                                    // Only the picture is new: send just the picture (never old stock numbers).
+                                    val img = withContext(Dispatchers.IO) { encodeImage(path) }
+                                    sent[id] = path
+                                    sentChanged = true
+                                    if (img != null) {
+                                        ops.add { b -> b.set(ref, hashMapOf<String, Any>("image" to img), SetOptions.merge()) }
+                                    }
                                 }
                             }
                             for (id in hashes.keys.toList()) {
@@ -370,6 +484,7 @@ object Cloud {
                             if (ops.isNotEmpty()) {
                                 commit(fs, ops)
                                 saveMap(prefs, "ph_$uid", hashes)
+                                if (sentChanged) saveMap(prefs, "pi_$uid", sent)
                             }
                         } }
                     }
@@ -459,13 +574,20 @@ object Cloud {
                         }
                     }
                     regs += base.collection("products").addSnapshotListener { snap, err ->
-                        handle("products", snap, err) { applyRemoteProducts(dao, prefs, uid, it) }
+                        handle("products", snap, err) { applyRemoteProducts(context, dao, prefs, uid, it) }
                     }
                     regs += base.collection("labels").addSnapshotListener { snap, err ->
                         handle("labels", snap, err) { applyRemoteLabels(dao, prefs, uid, it) }
                     }
                     regs += base.collection("sales").addSnapshotListener { snap, err ->
                         handle("sales", snap, err) { applyRemoteSales(dao, it) }
+                    }
+                    regs += metaRef.addSnapshotListener { snap, err ->
+                        if (err == null && snap != null && snap.exists() && !snap.metadata.hasPendingWrites()) {
+                            val shop = snap.getString("shopName") ?: ""
+                            val symbol = snap.getString("currency") ?: ""
+                            if (shop.isNotBlank()) remoteMeta.tryEmit(shop to symbol.ifBlank { "₱" })
+                        }
                     }
                 }
             } finally {
@@ -482,9 +604,11 @@ object Cloud {
     // ------------------------------------------------- download (cloud -> phone)
 
     private suspend fun applyRemoteProducts(
-        dao: PosDao, prefs: SharedPreferences, uid: String, changes: List<DocumentChange>
+        context: Context, dao: PosDao, prefs: SharedPreferences, uid: String, changes: List<DocumentChange>
     ) {
         val hashes = loadMap(prefs, "ph_$uid")
+        val sent = loadMap(prefs, "pi_$uid")   // picture file already in the cloud, per product
+        val seen = loadMap(prefs, "ih_$uid")   // cloud picture already on this phone, per product
         var dirty = false
         for (c in changes) {
             val d = c.document
@@ -492,7 +616,10 @@ object Cloud {
             if (c.type == DocumentChange.Type.REMOVED) {
                 val id = d.getLong("id") ?: d.id.toLongOrNull()
                 if (id != null) {
+                    dao.getById(id)?.imagePath?.let { File(it).delete() }
                     hashes.remove(id.toString())
+                    sent.remove(id.toString())
+                    seen.remove(id.toString())
                     dao.deleteProduct(id)
                     dirty = true
                 }
@@ -501,19 +628,45 @@ object Cloud {
             val remote = productFrom(d) ?: continue
             val key = remote.id.toString()
             val local = dao.getById(remote.id)
-            if (local != null) {
-                // Never overwrite a change on this phone that has not been uploaded yet.
-                if (hashes[key] != productHash(local)) continue
-                if (productHash(local) == productHash(remote)) continue
+            val img = d.getString("image")
+            val imgKey = if (img != null && img.startsWith("data:image")) imageKey(img) else null
+
+            val fieldsChanged = local == null || productHash(local) != productHash(remote)
+            val imageChanged = imgKey != null && seen[key] != imgKey
+            if (!fieldsChanged && !imageChanged) continue
+
+            // Never overwrite something changed on this phone that has not been uploaded yet.
+            val fieldsWaiting = local != null && hashes[key] != productHash(local)
+            val imageWaiting = local != null && local.imagePath != null && sent[key] != local.imagePath
+            val applyFields = fieldsChanged && !fieldsWaiting
+            val applyImage = imageChanged && !imageWaiting
+            if (!applyFields && !applyImage) continue
+
+            if (applyFields) {
+                // Never create two products with the same barcode.
+                val sameBarcode = dao.findByBarcode(remote.barcode)
+                if (sameBarcode != null && sameBarcode.id != remote.id) continue
             }
-            // Never create two products with the same barcode.
-            val sameBarcode = dao.findByBarcode(remote.barcode)
-            if (sameBarcode != null && sameBarcode.id != remote.id) continue
-            hashes[key] = productHash(remote)
-            dao.restoreProducts(listOf(remote.copy(imagePath = local?.imagePath)))
+            var imagePath = local?.imagePath
+            if (applyImage && img != null && imgKey != null) {
+                val saved = withContext(Dispatchers.IO) { saveCloudImage(context, remote.id, img) }
+                if (saved != null) {
+                    local?.imagePath?.let { old -> if (old != saved) File(old).delete() }
+                    imagePath = saved
+                    sent[key] = saved
+                }
+                seen[key] = imgKey
+            }
+            val target = if (applyFields || local == null) remote else local
+            if (applyFields) hashes[key] = productHash(remote)
+            dao.restoreProducts(listOf(target.copy(imagePath = imagePath)))
             dirty = true
         }
-        if (dirty) saveMap(prefs, "ph_$uid", hashes)
+        if (dirty) {
+            saveMap(prefs, "ph_$uid", hashes)
+            saveMap(prefs, "pi_$uid", sent)
+            saveMap(prefs, "ih_$uid", seen)
+        }
     }
 
     private suspend fun applyRemoteLabels(
@@ -523,7 +676,16 @@ object Cloud {
         var dirty = false
         for (c in changes) {
             val d = c.document
-            if (d.metadata.hasPendingWrites() || c.type == DocumentChange.Type.REMOVED) continue
+            if (d.metadata.hasPendingWrites()) continue
+            if (c.type == DocumentChange.Type.REMOVED) {
+                val name = d.getString("name") ?: d.id.removePrefix("l_")
+                if (dao.allProducts().none { it.label == name }) {
+                    hashes.remove(labelId(name))
+                    dao.deleteLabel(name)
+                    dirty = true
+                }
+                continue
+            }
             val remote = labelFrom(d) ?: continue
             val key = labelId(remote.name)
             val local = dao.allLabels().firstOrNull { it.name == remote.name }
@@ -555,9 +717,11 @@ object Cloud {
             if (local != null &&
                 local.sale.total == remote.sale.total &&
                 local.sale.timestamp == remote.sale.timestamp &&
+                local.sale.type == remote.sale.type &&
                 local.items.size == remote.items.size
             ) continue
-            // REPLACE removes the old copy of this sale (and its items), then the new items are added.
+            // Remove the old copy of this sale (its items go with it), then add the new one.
+            dao.deleteSale(remote.sale.id)
             dao.restoreSales(listOf(remote.sale))
             dao.restoreSaleItems(remote.items.map { it.copy(id = 0L) })
         }
@@ -571,7 +735,21 @@ object Cloud {
         val base = FirebaseFirestore.getInstance(app).collection("users").document(uid)
         setBusy(true)
         return try {
-            val products = base.collection("products").get(Source.SERVER).await().documents.mapNotNull { productFrom(it) }
+            val productDocs = base.collection("products").get(Source.SERVER).await().documents
+            val sentMap = HashMap<String, String>()
+            val seenMap = HashMap<String, String>()
+            val products = withContext(Dispatchers.IO) {
+                productDocs.mapNotNull { d ->
+                    val p = productFrom(d) ?: return@mapNotNull null
+                    val img = d.getString("image")
+                    val path = if (img != null && img.startsWith("data:image")) saveCloudImage(context, p.id, img) else null
+                    if (path != null && img != null) {
+                        sentMap[p.id.toString()] = path
+                        seenMap[p.id.toString()] = imageKey(img)
+                    }
+                    p.copy(imagePath = path)
+                }
+            }
             val labels = base.collection("labels").get(Source.SERVER).await().documents.mapNotNull { labelFrom(it) }
             val sales = base.collection("sales").get(Source.SERVER).await().documents.mapNotNull { saleFrom(it) }
 
@@ -593,12 +771,15 @@ object Cloud {
             val productHashes = HashMap<String, String>()
             products.forEach { productHashes[it.id.toString()] = productHash(it) }
             saveMap(prefs, "ph_$uid", productHashes)
+            saveMap(prefs, "pi_$uid", sentMap)
+            saveMap(prefs, "ih_$uid", seenMap)
             val labelHashes = HashMap<String, String>()
             labels.forEach { labelHashes[labelId(it.name)] = "${it.name}|${it.colorIndex}" }
             saveMap(prefs, "lh_$uid", labelHashes)
             prefs.edit()
                 .putLong("ls_$uid", sales.maxOfOrNull { it.sale.id } ?: 0L)
                 .putBoolean("init_$uid", true)
+                .putBoolean("hv2_$uid", true)
                 .apply()
             syncTick.update { it + 1 }
             null
