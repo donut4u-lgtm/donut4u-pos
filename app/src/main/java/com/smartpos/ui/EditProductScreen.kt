@@ -66,14 +66,15 @@ fun EditProductScreen(vm: PosViewModel, productId: Long) {
                         initialName = product.name,
                         initialLabel = product.label,
                         initialPrice = plainAmount(product.price),
+                        initialWholesale = if (product.wholesale > 0) plainAmount(product.wholesale) else "",
                         initialStock = product.stock.toString(),
                         suggestions = emptyList(),
                         labels = labels,
                         colorIndexFor = { vm.colorIndexFor(it) },
                         currency = currency,
                         saveText = "Save changes",
-                        onSave = { code, name, label, price, stock ->
-                            vm.saveProduct(product, code, name, label, price, stock, product.imagePath) { ok ->
+                        onSave = { code, name, label, price, wholesale, stock ->
+                            vm.saveProduct(product, code, name, label, price, wholesale, stock, product.imagePath) { ok ->
                                 if (ok) {
                                     vm.toast("Saved")
                                     vm.screen.value = Screen.Home
