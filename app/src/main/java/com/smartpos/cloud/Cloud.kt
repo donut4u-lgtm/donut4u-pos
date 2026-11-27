@@ -451,7 +451,9 @@ object Cloud {
                 coroutineScope {
                     // Products: upload only what changed.
                     launch {
-                        dao.observeProducts().collect { list -> lock.withLock {
+                        dao.observeProducts().collect { _ -> lock.withLock {
+                            // Always read the phone's database again here (never trust an older copy of the list).
+                            val list = dao.allProducts()
                             val hashes = loadMap(prefs, "ph_$uid")
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             val ids = HashSet<String>()
@@ -500,7 +502,8 @@ object Cloud {
                     }
                     // Labels (columns and their colors)
                     launch {
-                        dao.observeLabels().collect { list -> lock.withLock {
+                        dao.observeLabels().collect { _ -> lock.withLock {
+                            val list = dao.allLabels()
                             val hashes = loadMap(prefs, "lh_$uid")
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             val ids = HashSet<String>()
@@ -531,7 +534,8 @@ object Cloud {
                     // Sales: upload new ones, remove voided ones.
                     launch {
                         var previousIds = emptySet<Long>()
-                        dao.observeSales().collect { list -> lock.withLock {
+                        dao.observeSales().collect { _ -> lock.withLock {
+                            val list = dao.allSales()
                             val lastUploaded = prefs.getLong("ls_$uid", 0L)
                             val ops = ArrayList<(WriteBatch) -> Unit>()
                             var maxId = lastUploaded
